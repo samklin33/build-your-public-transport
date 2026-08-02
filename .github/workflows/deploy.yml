@@ -39,13 +39,22 @@ jobs:
 
       - run: npm run build
 
+      # 需要先在 repo 的 Settings → Pages 把 Source 設成「GitHub Actions」。
+      # 這一步無法由 workflow 自動完成：GITHUB_TOKEN 沒有建立 Pages site 的權限
+      # （會得到 "Resource not accessible by integration"），只能由 repo 擁有者手動開一次。
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
+
+      # 順便產一份單檔版：整個遊戲內嵌成一個 HTML，下載後直接雙擊就能玩，
+      # 不需要伺服器也不需要網路。
+      - run: npm run build:single
+      - uses: actions/upload-artifact@v4
+        with:
+          name: standalone-html
+          path: dist-single/index.html
 
   deploy:
     needs: build

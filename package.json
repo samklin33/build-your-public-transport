@@ -12,7 +12,8 @@
     "build:pack": "tsx scripts/build-city-pack.ts",
     "calibrate": "tsx scripts/calibrate.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:single": "VITE_INLINE_PACK=1 vite build"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -32,6 +33,7 @@
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
     "vite": "^5.4.10",
+    "vite-plugin-singlefile": "^2.3.3",
     "vitest": "^2.1.4"
   }
 }

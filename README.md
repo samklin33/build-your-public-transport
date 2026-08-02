@@ -26,7 +26,28 @@ npm run dev            # http://localhost:5173
 npm run calibrate      # 用真實台北捷運驗證模擬器準不準
 npm test               # 單元測試
 npm run build          # 產生靜態網站到 dist/
+npm run build:single   # 產生單檔版 dist-single/index.html
 ```
+
+## 部署
+
+### 單檔版（最簡單）
+
+`npm run build:single` 會把城市資料、JS、CSS 全部內嵌成**一個 HTML 檔**，
+直接雙擊就能玩，不需要伺服器也不需要網路。約 1.8 MB。
+
+模擬預設跑在 Web Worker，但遇到擋 blob: worker 的嚴格 CSP 環境會自動退回主執行緒
+（全網模擬只要 50–70 ms，主執行緒跑也不會卡）。
+
+### GitHub Pages
+
+`.github/workflows/deploy.yml` 會在推上分支時自動建置並部署，
+部署前先跑單元測試與校準檢查 —— 模擬器算不準就不該發出去。
+
+**需要先手動開啟一次**：repo 的 **Settings → Pages → Source** 選 **GitHub Actions**。
+這一步沒辦法由 workflow 自動完成，`GITHUB_TOKEN` 沒有建立 Pages site 的權限。
+開啟後重跑一次 workflow 即可，網址會是
+`https://samklin33.github.io/build-your-public-transport/`。
 
 ---
 

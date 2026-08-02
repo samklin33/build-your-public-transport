@@ -18,6 +18,8 @@ import type {
   TransitMode,
 } from '../model/types';
 import { prepareCity, type PreparedCity } from '../render/prepare';
+import SimWorker from '../sim/worker?worker&inline';
+import { createSimContext, simulate, type SimContext } from '../sim/simulate';
 import type { WorkerRequest, WorkerResponse } from '../sim/worker';
 
 export type Scenario = 'blank' | 'extend';
@@ -65,6 +67,12 @@ interface State {
 }
 
 let worker: Worker | null = null;
+/**
+ * Worker 建不起來時的退路（某些嚴格的 CSP 環境會擋掉 blob: worker）。
+ * 全網模擬只要 50–70ms，直接在主執行緒跑也不會卡住畫面，
+ * 有這條退路就不會因為執行環境的限制整個玩不了。
+ */
+let fallbackCtx: SimContext | null = null;
 let seq = 0;
 let pendingTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -76,11 +84,31 @@ function scheduleSim(get: () => State, set: (p: Partial<State>) => void) {
   pendingTimer = setTimeout(() => {
     pendingTimer = null;
     const { network } = get();
-    if (!worker) return;
-    set({ simulating: true });
     seq += 1;
-    const msg: WorkerRequest = { type: 'simulate', network, seq };
-    worker.postMessage(msg);
+
+    if (worker) {
+      set({ simulating: true });
+      const msg: WorkerRequest = { type: 'simulate', network, seq };
+      worker.postMessage(msg);
+      return;
+    }
+
+    if (fallbackCtx) {
+      set({ simulating: true });
+      const mySeq = seq;
+      // 讓出一次事件迴圈，「計算中」的狀態才有機會畫出來
+      setTimeout(() => {
+        try {
+          const result = simulate(fallbackCtx!, network);
+          if (mySeq === seq) set({ result, simulating: false });
+        } catch (err) {
+          set({
+            loadError: err instanceof Error ? err.message : String(err),
+            simulating: false,
+          });
+        }
+      }, 0);
+    }
   }, SIM_DEBOUNCE_MS);
 }
 
@@ -105,30 +133,46 @@ export const useStore = create<State>((set, get) => ({
 
   async init() {
     try {
-      const res = await fetch(`${import.meta.env.BASE_URL}city-packs/taipei.json`);
-      if (!res.ok) throw new Error(`載入城市資料失敗（HTTP ${res.status}）`);
-      const pack = (await res.json()) as CityPack;
+      let pack: CityPack;
+      if (__INLINE_PACK__) {
+        // 單檔版：城市資料直接打包進 bundle，整個遊戲一個 HTML 檔就能跑。
+        const m = await import('../../public/city-packs/taipei.json');
+        pack = m.default as unknown as CityPack;
+      } else {
+        const res = await fetch(`${import.meta.env.BASE_URL}city-packs/taipei.json`);
+        if (!res.ok) throw new Error(`載入城市資料失敗（HTTP ${res.status}）`);
+        pack = (await res.json()) as CityPack;
+      }
+
       const prepared = prepareCity(pack);
       set({ pack, prepared });
 
-      worker = new Worker(new URL('../sim/worker.ts', import.meta.url), {
-        type: 'module',
-      });
-      worker.onmessage = (ev: MessageEvent<WorkerResponse>) => {
-        const m = ev.data;
-        if (m.type === 'ready') {
+      try {
+        worker = new SimWorker();
+        worker.onmessage = (ev: MessageEvent<WorkerResponse>) => {
+          const m = ev.data;
+          if (m.type === 'ready') {
+            scheduleSim(get, set);
+          } else if (m.type === 'result') {
+            // 舊的計算結果晚到就丟掉，避免蓋掉比較新的結果。
+            if (m.seq === seq) set({ result: m.result, simulating: false });
+          } else if (m.type === 'error') {
+            set({ loadError: m.message, simulating: false });
+          }
+        };
+        worker.onerror = () => {
+          // Worker 起不來就改用主執行緒，不要讓玩家卡在空畫面。
+          worker?.terminate();
+          worker = null;
+          fallbackCtx ??= createSimContext(pack);
           scheduleSim(get, set);
-        } else if (m.type === 'result') {
-          // 舊的計算結果晚到就丟掉，避免蓋掉比較新的結果。
-          if (m.seq === seq) set({ result: m.result, simulating: false });
-        } else if (m.type === 'error') {
-          set({ loadError: m.message, simulating: false });
-        }
-      };
-      worker.onerror = (e) => set({ loadError: `模擬引擎錯誤：${e.message}` });
-
-      const initMsg: WorkerRequest = { type: 'init', pack };
-      worker.postMessage(initMsg);
+        };
+        const initMsg: WorkerRequest = { type: 'init', pack };
+        worker.postMessage(initMsg);
+      } catch {
+        fallbackCtx = createSimContext(pack);
+        scheduleSim(get, set);
+      }
     } catch (err) {
       set({ loadError: err instanceof Error ? err.message : String(err) });
     }
