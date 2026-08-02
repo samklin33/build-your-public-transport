@@ -15,6 +15,7 @@ import type {
   CityPack,
   District,
   Road,
+  Water,
   PackLine,
   PackNetwork,
   PackStation,
@@ -257,6 +258,21 @@ async function main() {
   const popByDistrict = await readPopulation();
   const rawMrt = await readJson<RawMrt>(resolve(SRC, 'trtc-network.json'));
 
+  // 陸地底圖（縣市界）
+  const countiesFc = await readJson<FeatureCollection<Polygon | MultiPolygon>>(
+    resolve(SRC, 'twn-counties.geojson'),
+  );
+  const landmass: number[][] = [];
+  for (const f of countiesFc.features) landmass.push(...toFlatRings(f.geometry));
+
+  // 水域是選用的：還沒跑過 npm run fetch:water 也要能建出 pack
+  let water: Water[] = [];
+  try {
+    water = await readJson<Water[]>(resolve(SRC, 'twn-water.json'));
+  } catch {
+    console.warn('  ! 找不到 twn-water.json，這次的 pack 不含水域（先跑 npm run fetch:water）');
+  }
+
   // 道路是選用的：還沒跑過 npm run fetch:roads 也要能建出 pack
   let roads: Road[] = [];
   try {
@@ -370,6 +386,10 @@ async function main() {
   }
   const totalJobs = zones.reduce((s, z) => s + z.jobs, 0);
   console.log(`  就業機會推估總數 ${Math.round(totalJobs).toLocaleString()}`);
+  console.log(`  陸地底圖 ${landmass.length} 個環`);
+  if (water.length) {
+    console.log(`  水域 ${water.length.toLocaleString()} 個`);
+  }
   if (roads.length) {
     const n0 = roads.filter((r) => r.cls === 0).length;
     const n1 = roads.filter((r) => r.cls === 1).length;
@@ -481,7 +501,9 @@ async function main() {
     bbox: [w, s, e, nBound],
     districts,
     zones,
+    landmass,
     roads,
+    water,
     employmentCenters: TAIPEI_EMPLOYMENT_CENTERS,
     referenceNetwork,
     costModel: DEFAULT_COST_MODEL,

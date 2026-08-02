@@ -122,7 +122,9 @@ export function draw(ctx: CanvasRenderingContext2D, o: DrawOptions): void {
   const vMinY = cam.cy - halfH;
   const vMaxY = cam.cy + halfH;
 
+  drawLandmass(ctx, o);
   drawZones(ctx, o, vMinX, vMinY, vMaxX, vMaxY);
+  drawWater(ctx, o);
   drawRoads(ctx, o, vMinX, vMinY, vMaxX, vMaxY);
   drawNetwork(ctx, o);
   drawDraft(ctx, o);
@@ -130,6 +132,49 @@ export function draw(ctx: CanvasRenderingContext2D, o: DrawOptions): void {
   drawDistrictLabels(ctx, o);
 
   ctx.restore();
+}
+
+/**
+ * 陸地底圖。畫在村里之下。
+ *
+ * 村里界只畫到河岸，河面本身留白。少了這一層，那些縫隙會露出背景的海色，
+ * 看起來像一條又細又斷的假河 —— 而且只有縣市界經過的河才會有縫隙，
+ * 完全位於臺北市內的基隆河反而一點都看不到，等於在地圖上宣告了錯誤的地理。
+ * 縣市界的聯集會把河面蓋住，把「未知」畫成陸地而不是假水。
+ */
+function drawLandmass(ctx: CanvasRenderingContext2D, o: DrawOptions): void {
+  const { cam, city } = o;
+  if (city.landmass.length === 0) return;
+  ctx.beginPath();
+  for (const ring of city.landmass) {
+    const [sx, sy] = worldToScreen(cam, ring[0], ring[1]);
+    ctx.moveTo(sx, sy);
+    for (let i = 2; i < ring.length; i += 2) {
+      const [px, py] = worldToScreen(cam, ring[i], ring[i + 1]);
+      ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+  }
+  ctx.fillStyle = COLORS.land;
+  ctx.fill();
+}
+
+/** 真實水域。跑過 npm run fetch:water 之後才有資料。 */
+function drawWater(ctx: CanvasRenderingContext2D, o: DrawOptions): void {
+  const { cam, city } = o;
+  if (city.water.length === 0) return;
+  ctx.beginPath();
+  for (const ring of city.water) {
+    const [sx, sy] = worldToScreen(cam, ring[0], ring[1]);
+    ctx.moveTo(sx, sy);
+    for (let i = 2; i < ring.length; i += 2) {
+      const [px, py] = worldToScreen(cam, ring[i], ring[i + 1]);
+      ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+  }
+  ctx.fillStyle = COLORS.sea;
+  ctx.fill();
 }
 
 function drawZones(

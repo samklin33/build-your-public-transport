@@ -63,6 +63,10 @@ async function main() {
     topo,
     topo.objects.towns as GeometryCollection,
   ) as FeatureCollection<Polygon | MultiPolygon>;
+  const counties = feature(
+    topo,
+    topo.objects.counties as GeometryCollection,
+  ) as FeatureCollection<Polygon | MultiPolygon>;
 
   const inTarget = (p: Record<string, unknown> | null) =>
     TARGET_COUNTIES.has(String(p?.COUNTYNAME ?? ''));
@@ -107,6 +111,22 @@ async function main() {
   console.log(`  ✓ twn-villages.geojson (${villageSubset.features.length} 村里)`);
   await writeFile(resolve(OUT, 'twn-districts.geojson'), JSON.stringify(townSubset));
   console.log(`  ✓ twn-districts.geojson (${townSubset.features.length} 區)`);
+
+  // 縣市界。用途是當作「陸地」底圖：臺北市與新北市的界線正好走在淡水河、
+  // 新店溪的河道中央，兩市聯集起來會把河面完整蓋住，而村里界不會 ——
+  // 村里只畫到河岸，中間留下縫隙，那些縫隙會露出背景色被誤看成河。
+  const countySubset = {
+    type: 'FeatureCollection' as const,
+    features: counties.features.filter((f) => inTarget(f.properties)).map((f) => ({
+      type: 'Feature' as const,
+      properties: { COUNTYNAME: normCounty(String(f.properties!.COUNTYNAME)) },
+      geometry: { ...f.geometry, coordinates: roundCoords(f.geometry.coordinates) },
+    })),
+  };
+  if (countySubset.features.length !== 2)
+    throw new Error(`預期 2 個縣市，實際 ${countySubset.features.length}`);
+  await writeFile(resolve(OUT, 'twn-counties.geojson'), JSON.stringify(countySubset));
+  console.log(`  ✓ twn-counties.geojson (${countySubset.features.length} 縣市)`);
 
   // 2. 鄉鎮市區人口（內政部，民國 106 年）
   await download(SOURCES.population, resolve(OUT, 'twn-township-population.csv'));

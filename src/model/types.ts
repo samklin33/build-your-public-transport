@@ -88,6 +88,12 @@ export interface Road {
   path: number[];
 }
 
+/** 水域多邊形（外環，扁平化的 [lon,lat,...]）。 */
+export interface Water {
+  name: string;
+  ring: number[];
+}
+
 export interface EmploymentCenter {
   name: string;
   lon: number;
@@ -195,8 +201,18 @@ export interface CityPack {
   bbox: [number, number, number, number];
   districts: District[];
   zones: Zone[];
+  /**
+   * 陸地範圍（縣市界的環）。畫在村里之下當底圖。
+   *
+   * 村里界只畫到河岸，河面本身留白；少了這層底圖，那些縫隙會露出背景色，
+   * 看起來像一條又細又斷的假河 —— 而且只有縣市界經過的河才會出現這種縫隙，
+   * 完全在台北市內的基隆河反而一點都看不到。
+   */
+  landmass: number[][];
   /** 主要道路。空陣列代表這座城市還沒有道路資料。 */
   roads: Road[];
+  /** 水域。空陣列代表還沒跑過 npm run fetch:water。 */
+  water: Water[];
   employmentCenters: EmploymentCenter[];
   /** 現實世界既有路網，供「現況延伸」情境與校準對照使用。 */
   referenceNetwork: PackNetwork;

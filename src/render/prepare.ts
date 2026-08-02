@@ -43,6 +43,10 @@ export interface PreparedCity {
   zones: PreparedZone[];
   districts: PreparedDistrict[];
   roads: PreparedRoad[];
+  /** 陸地底圖，投影後的環。 */
+  landmass: Float32Array[];
+  /** 水域，投影後的環。 */
+  water: Float32Array[];
   /** 世界座標的整體範圍。 */
   minX: number;
   minY: number;
@@ -157,6 +161,9 @@ export function prepareCity(pack: CityPack): PreparedCity {
     return { cls: r.cls, name: r.name, path, minX: rMinX, minY: rMinY, maxX: rMaxX, maxY: rMaxY };
   });
 
+  const landmass = projectRings(pack.landmass ?? []).out;
+  const water = projectRings((pack.water ?? []).map((w) => w.ring)).out;
+
   const densities = zones.map((z) => z.densityPerKm2).sort((a, b) => a - b);
   const densityP95 = densities[Math.floor(densities.length * 0.95)] || 1;
 
@@ -181,6 +188,8 @@ export function prepareCity(pack: CityPack): PreparedCity {
     zones,
     districts,
     roads,
+    landmass,
+    water,
     minX,
     minY,
     maxX,
