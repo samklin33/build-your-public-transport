@@ -227,6 +227,9 @@ export function simulate(ctx: SimContext, network: Network): SimResult {
         const base = s * S;
         for (let b = bStart; b < bEnd; b++) {
           const t = access.station[b];
+          // 進出站同一站表示根本沒搭到車，只是走路過去。
+          // 不排除的話這種「旅次」會被算成大眾運輸運量，讓總運量高於各線上車數總和。
+          if (t === s) continue;
           const ride = T[base + t];
           if (ride === Infinity) continue;
           const total = wIn + ride + access.walkMin[b];

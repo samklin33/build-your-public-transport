@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { kmBetween, pointInRing, ringAreaKm2, ringCentroid } from '../src/model/geo';
 import { DEFAULT_COST_MODEL, DEFAULT_SIM_PARAMS } from '../src/model/defaults';
-import type { Network, SimParams } from '../src/model/types';
+import type { CityPack, Network, SimParams } from '../src/model/types';
 import { buildTransitGraph } from '../src/sim/graph';
 import { Dijkstra } from '../src/sim/dijkstra';
 import { buildGravityOD } from '../src/sim/demand';
-import { congestedCarSpeed } from '../src/sim/simulate';
+import { congestedCarSpeed, createSimContext, simulate } from '../src/sim/simulate';
 
 const LAT = 25.05;
 /** 在緯度 25.05 附近，往東移動 km 公里所需的經度差。 */
@@ -231,6 +231,94 @@ describe('壅塞模型', () => {
     const noTransit = congestedCarSpeed(p, 1_920_000);
     const withTransit = congestedCarSpeed(p, 1_920_000 * 0.87);
     expect(withTransit).toBeGreaterThan(noTransit);
+  });
+});
+
+describe('指派守恆', () => {
+  /**
+   * 造一個小城市：zone 間距 0.4 km，遠比車站間距（3 km）密。
+   * 這樣一定會有好幾個 zone 共用同一個最近車站 —— 正是「進出站同一站」
+   * 那個 bug 會出現的條件，測試必須重現它才有意義。
+   */
+  const ZONE_SPACING_KM = 0.4;
+  const STATION_SPACING_KM = 3;
+  const MINI_STATIONS = 4;
+
+  function miniPack(): CityPack {
+    const n = 24;
+    const zones = [];
+    for (let i = 0; i < n; i++) {
+      const lon = 121.5 + lonOffsetForKm(i * ZONE_SPACING_KM);
+      zones.push({
+        id: i,
+        code: `z${i}`,
+        name: `z${i}`,
+        districtId: 0,
+        lon,
+        lat: LAT,
+        areaKm2: 1,
+        population: 5000,
+        jobs: 3000,
+        rings: [[lon - 0.001, LAT - 0.001, lon + 0.001, LAT - 0.001, lon + 0.001, LAT + 0.001, lon - 0.001, LAT + 0.001, lon - 0.001, LAT - 0.001]],
+      });
+    }
+    const lon = new Float64Array(zones.map((z) => z.lon));
+    const lat = new Float64Array(zones.map((z) => z.lat));
+    const population = new Float64Array(zones.map((z) => z.population));
+    const jobs = new Float64Array(zones.map((z) => z.jobs));
+    const { od } = buildGravityOD({
+      lon, lat, population, jobs,
+      gravityBeta: DEFAULT_SIM_PARAMS.gravityBeta,
+      tripsPerPersonPerDay: DEFAULT_SIM_PARAMS.tripsPerPersonPerDay,
+      peakHourShare: DEFAULT_SIM_PARAMS.peakHourShare,
+      carSpeedKmh: DEFAULT_SIM_PARAMS.carSpeedKmh,
+      detourFactor: DEFAULT_SIM_PARAMS.detourFactor,
+      topK: 23,
+    });
+    return {
+      id: 'mini',
+      name: 'mini',
+      bbox: [121.4, 24.9, 122.0, 25.2],
+      districts: [{ id: 0, code: 'd0', name: 'd0', county: 'x', population: n * 5000, areaKm2: n }],
+      zones,
+      employmentCenters: [],
+      referenceNetwork: { stations: [], lines: [] },
+      costModel: DEFAULT_COST_MODEL,
+      simParams: DEFAULT_SIM_PARAMS,
+      baseOD: od,
+      sources: [],
+    } as CityPack;
+  }
+
+  it('單一路線時，總旅次數 = 該線上車人次（沒搭到車的不該被算成運量）', () => {
+    const pack = miniPack();
+    const ctx = createSimContext(pack);
+    // 車站正好蓋在每個 zone 上，相鄰 zone 常會共用最近的車站
+    const net = lineNetwork(STATION_SPACING_KM, MINI_STATIONS, 240);
+    const r = simulate(ctx, net);
+
+    expect(r.peakTransitTrips).toBeGreaterThan(0);
+    const boardings = r.lines[0].ridership;
+    // 每一趟大眾運輸旅次在單線網路上都只會上車一次
+    expect(boardings).toBeCloseTo(r.peakTransitTrips, 3);
+  });
+
+  it('每個路段的客流不會超過總旅次數', () => {
+    const pack = miniPack();
+    const ctx = createSimContext(pack);
+    const r = simulate(ctx, lineNetwork(STATION_SPACING_KM, MINI_STATIONS, 240));
+    for (const s of r.segments) {
+      expect(s.load).toBeLessThanOrEqual(r.peakTransitTrips + 1e-6);
+    }
+  });
+
+  it('沒有路線時不產生任何運量，平均時間等於基準', () => {
+    const pack = miniPack();
+    const ctx = createSimContext(pack);
+    const r = simulate(ctx, { stations: {}, lines: [] });
+    expect(r.peakTransitTrips).toBe(0);
+    expect(r.coveragePct).toBe(0);
+    expect(r.avgAllTimeMin).toBeCloseTo(r.baselineTimeMin, 6);
   });
 });
 

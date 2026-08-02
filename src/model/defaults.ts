@@ -98,7 +98,7 @@ export const DEFAULT_SIM_PARAMS: SimParams = {
   congestionAlpha: 0.6,
   congestionBeta: 4,
   detourFactor: 1.32,
-  logitConstant: -0.72,
+  logitConstant: -0.8,
   logitTimeCoef: 0.11,
   odTopK: 50,
 };
