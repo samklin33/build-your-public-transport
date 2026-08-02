@@ -13,7 +13,8 @@
     "calibrate": "tsx scripts/calibrate.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "build:single": "VITE_INLINE_PACK=1 vite build"
+    "build:single": "VITE_INLINE_PACK=1 vite build",
+    "fetch:roads": "tsx scripts/fetch-roads.ts"
   },
   "dependencies": {
     "react": "^18.3.1",
