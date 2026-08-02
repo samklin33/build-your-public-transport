@@ -1,0 +1,37 @@
+{
+  "name": "build-your-public-transport",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "雙北大眾運輸規劃遊戲 — 用真實開放資料規劃你自己的捷運路網",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "fetch:sources": "tsx scripts/fetch-sources.ts",
+    "build:pack": "tsx scripts/build-city-pack.ts",
+    "calibrate": "tsx scripts/calibrate.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^4.5.5"
+  },
+  "devDependencies": {
+    "@types/geojson": "^7946.0.16",
+    "@types/node": "^26.1.2",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/topojson-client": "^3.1.5",
+    "@types/topojson-specification": "^1.0.5",
+    "@vitejs/plugin-react": "^4.3.3",
+    "taiwan-atlas": "^2021.9.20",
+    "topojson-client": "^3.1.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10",
+    "vitest": "^2.1.4"
+  }
+}
