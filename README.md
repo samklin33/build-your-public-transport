@@ -41,13 +41,22 @@ npm run build:single   # 產生單檔版 dist-single/index.html
 
 ### GitHub Pages
 
-`.github/workflows/deploy.yml` 會在推上分支時自動建置並部署，
-部署前先跑單元測試與校準檢查 —— 模擬器算不準就不該發出去。
+已部署於 **https://samklin33.github.io/build-your-public-transport/**
 
-**需要先手動開啟一次**：repo 的 **Settings → Pages → Source** 選 **GitHub Actions**。
-這一步沒辦法由 workflow 自動完成，`GITHUB_TOKEN` 沒有建立 Pages site 的權限。
-開啟後重跑一次 workflow 即可，網址會是
-`https://samklin33.github.io/build-your-public-transport/`。
+`.github/workflows/deploy.yml` 會在推上 `main` 時自動建置並部署，
+部署前先跑單元測試與校準檢查 —— 模擬器算不準就不該發出去。
+功能分支也會跑測試與校準，但不部署。
+
+第一次設定時踩到的兩個坑，記錄在這裡免得重蹈：
+
+1. **Pages 必須先手動啟用一次**：repo 的 **Settings → Pages → Source** 選 **GitHub Actions**。
+   workflow 沒辦法自動完成，`GITHUB_TOKEN` 沒有建立 Pages site 的權限
+   （`configure-pages` 會回 `Resource not accessible by integration`）。
+
+2. **只能從預設分支部署**：啟用 Pages 時自動建立的 `github-pages` 環境，
+   預設只允許預設分支部署。從功能分支跑的話，`deploy` job 會在還沒開始執行前
+   就被擋掉 —— 狀態是 failure 但**完全沒有 log**，很難查。
+   所以 `deploy` job 加了 `if: github.ref == 'refs/heads/main'`。
 
 ---
 

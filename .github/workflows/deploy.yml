@@ -56,7 +56,12 @@ jobs:
           name: standalone-html
           path: dist-single/index.html
 
+  # 只從預設分支部署。github-pages 這個環境在啟用 Pages 時會自動建立，
+  # 預設只允許預設分支部署到它；從功能分支跑，deploy job 會在還沒開始執行前
+  # 就被擋掉（狀態是 failure、而且完全沒有 log，很難查）。
+  # 功能分支仍然會跑上面的測試與校準，只是不部署。
   deploy:
+    if: github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     environment:
