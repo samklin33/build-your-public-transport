@@ -29,7 +29,7 @@ export interface PreparedDistrict {
 }
 
 export interface PreparedRoad {
-  cls: 0 | 1;
+  cls: 0 | 1 | 2;
   name: string;
   /** 投影後的世界座標，扁平化的 [x,y,x,y,...]。 */
   path: Float32Array;

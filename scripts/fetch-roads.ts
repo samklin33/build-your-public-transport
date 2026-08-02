@@ -57,11 +57,11 @@ async function main() {
   const json = JSON.stringify(roads);
   await writeFile(path, json);
 
-  const arterial = roads.filter((r) => r.cls === 0).length;
+  const count = (c: number) => roads.filter((r) => r.cls === c).length.toLocaleString();
   const totalPts = roads.reduce((a, r) => a + r.path.length / 2, 0);
   console.log(`\n  ✓ ${path.replace(ROOT + '/', '')} (${(json.length / 1024 / 1024).toFixed(2)} MB)`);
-  console.log(`  幹道 ${arterial.toLocaleString()} 段 / 次要道路 ${(roads.length - arterial).toLocaleString()} 段`);
-  console.log(`  座標點 ${totalPts.toLocaleString()}（簡化容差 ${SIMPLIFY_M} m）`);
+  console.log(`  幹道 ${count(0)} / 次要道路 ${count(1)} / 街廓道路 ${count(2)}`);
+  console.log(`  座標點 ${totalPts.toLocaleString()}`);
   console.log('\n完成。接著執行 npm run build:pack');
 }
 

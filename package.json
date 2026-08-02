@@ -14,7 +14,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "build:single": "VITE_INLINE_PACK=1 vite build",
-    "fetch:roads": "tsx scripts/fetch-roads.ts"
+    "fetch:roads": "tsx scripts/fetch-roads.ts",
+    "fetch:water": "tsx scripts/fetch-water.ts"
   },
   "dependencies": {
     "react": "^18.3.1",

@@ -5,27 +5,35 @@ import type { PreparedCity, PreparedZone } from './prepare';
 import type { Overlay } from '../state/store';
 
 export const COLORS = {
-  sea: '#0b131d',
-  land: '#1b2735',
+  /**
+   * 水域用明確的藍。地面色階刻意完全避開藍色 ——
+   * 舊版的密度色階從深藍起頭，結果人口稀疏的山區看起來就像河流或海，
+   * 整張圖的水陸關係是錯的。藍色只保留給水。
+   */
+  sea: '#12324a',
+  land: '#242a2e',
   zoneStroke: 'rgba(255,255,255,0.045)',
   districtStroke: 'rgba(255,255,255,0.16)',
   label: 'rgba(226,238,255,0.55)',
   stationFill: '#ffffff',
-  stationStroke: '#0b131d',
+  stationStroke: '#141a1f',
   draft: '#ffd54a',
-  noService: '#2a3542',
+  noService: '#33383c',
 };
 
-/** 人口密度色階：深藍 → 青 → 黃，低到高。 */
+/**
+ * 人口密度色階：暖灰 → 橄欖 → 金黃，低到高。
+ * 全程不用藍色，稀疏的地面才不會被誤讀成水域。
+ */
 function densityColor(t: number): string {
   const c = clamp01(t);
   const stops: [number, number, number][] = [
-    [26, 42, 62],
-    [28, 78, 112],
-    [26, 130, 140],
-    [104, 176, 106],
-    [214, 200, 80],
-    [246, 220, 140],
+    [36, 42, 46],
+    [56, 66, 56],
+    [82, 98, 62],
+    [126, 136, 66],
+    [186, 168, 74],
+    [238, 214, 138],
   ];
   return rampColor(stops, c);
 }
@@ -176,6 +184,7 @@ function drawRoads(
   if (!showRoads || city.roads.length === 0) return;
 
   const showSecondary = cam.scale > 260_000;
+  const showLocal = cam.scale > 900_000;
 
   /** 把同一級的道路併成一條 path，只描邊一次 —— 比每條各描一次快得多。 */
   const tracePath = (cls: number) => {
@@ -199,12 +208,18 @@ function drawRoads(
   // 深色外框 + 淺色內芯。單用淺色的話，道路在人口密度圖亮黃色的市中心會整個消失，
   // 反而只剩山區看得到 —— 正好跟需要看清楚的地方相反。
   // 外框讓道路在任何底色上都讀得出來。
-  const passes: [number, number, string, string][] = showSecondary
-    ? [
-        [1, secondaryW, 'rgba(8,14,22,0.55)', 'rgba(226,238,255,0.34)'],
-        [0, arterialW, 'rgba(8,14,22,0.75)', 'rgba(240,247,255,0.78)'],
-      ]
-    : [[0, arterialW, 'rgba(8,14,22,0.70)', 'rgba(240,247,255,0.70)']];
+  const localW = Math.min(1.1, 0.4 + cam.scale / 2_600_000);
+
+  // 由細到粗依序畫，等級高的道路才會壓在上面
+  const passes: [number, number, string, string][] = [];
+  if (showLocal) passes.push([2, localW, 'rgba(12,16,20,0.40)', 'rgba(226,238,255,0.20)']);
+  if (showSecondary) passes.push([1, secondaryW, 'rgba(12,16,20,0.55)', 'rgba(226,238,255,0.34)']);
+  passes.push([
+    0,
+    arterialW,
+    'rgba(12,16,20,0.75)',
+    showSecondary ? 'rgba(240,247,255,0.78)' : 'rgba(240,247,255,0.70)',
+  ]);
 
   for (const [cls, w, casing, core] of passes) {
     tracePath(cls);

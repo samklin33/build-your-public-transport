@@ -159,16 +159,16 @@ function cleanProps(p: RoadProps): RoadProps {
 // ─────────────────────────────────────────── 道路分級
 
 /**
- * 遊戲只分兩級。OSM 的六種 highway 等級對規劃決策而言分太細了，
- * 真正要回答的問題只有「這條路撐不撐得起軌道運輸」。
+ * 道路分三級。
  *
- *   0 幹道     trunk / primary —— 夠寬，高架可行
+ *   0 幹道     trunk / primary —— 夠寬，高架與 BRT 可行
  *   1 次要道路 secondary / tertiary —— 公車可走，高架勉強
+ *   2 街廓道路 residential / unclassified —— 只做底圖，讓街廓紋理讀得出來
  *
- * residential / unclassified（巷弄）整個不收：對路網規劃沒有意義，
- * 而且佔了雙北 8,635 條路、12 萬個座標點。
+ * 第 2 級只在拉得夠近時才畫。它佔了雙北一半以上的座標點，
+ * 但少了它，市區在近距離看起來會空得不像真實城市。
  */
-export type RoadClass = 0 | 1;
+export type RoadClass = 0 | 1 | 2;
 
 export interface Road {
   cls: RoadClass;
@@ -181,7 +181,7 @@ export interface Road {
 const TIER_TO_CLASS: Record<string, RoadClass | undefined> = {
   easy: 0, // trunk / primary
   medium: 1, // secondary / tertiary
-  hard: undefined, // residential / unclassified：巷弄，不收
+  hard: 2, // residential / unclassified：街廓道路與巷弄
 };
 
 type NamedRoadFeature = {
@@ -196,7 +196,12 @@ type NamedRoadFeature = {
  * 已經由 Overpass 抓好並 commit 進 repo。對這裡來說剛好可以直接用：
  * 範圍正好是雙北，而且 tier 欄位可以對應回道路等級。
  */
-export function parseNamedRoads(raw: unknown, simplifyToleranceM = 10): Road[] {
+export function parseNamedRoads(
+  raw: unknown,
+  simplifyToleranceM = 10,
+  /** 街廓道路可以簡化得更兇：它只是底圖紋理，不參與任何計算。 */
+  localToleranceM = 25,
+): Road[] {
   const data = raw as { type?: string; features?: NamedRoadFeature[] };
   if (data?.type !== 'FeatureCollection' || !Array.isArray(data.features)) {
     throw new Error('不是 GeoJSON FeatureCollection');
@@ -213,7 +218,7 @@ export function parseNamedRoads(raw: unknown, simplifyToleranceM = 10): Road[] {
     if (!Array.isArray(lines)) continue;
     for (const line of lines) {
       if (!Array.isArray(line) || line.length < 2) continue;
-      const simplified = simplifyPath(line, simplifyToleranceM);
+      const simplified = simplifyPath(line, cls === 2 ? localToleranceM : simplifyToleranceM);
       if (simplified.length < 2) continue;
       const flat: number[] = [];
       for (const [lon, lat] of simplified) flat.push(round5(lon), round5(lat));

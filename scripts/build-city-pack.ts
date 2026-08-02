@@ -371,9 +371,12 @@ async function main() {
   const totalJobs = zones.reduce((s, z) => s + z.jobs, 0);
   console.log(`  就業機會推估總數 ${Math.round(totalJobs).toLocaleString()}`);
   if (roads.length) {
-    const arterial = roads.filter((r) => r.cls === 0).length;
+    const n0 = roads.filter((r) => r.cls === 0).length;
+    const n1 = roads.filter((r) => r.cls === 1).length;
+    const n2 = roads.filter((r) => r.cls === 2).length;
+    const pts = roads.reduce((a, r) => a + r.path.length / 2, 0);
     console.log(
-      `  道路 ${roads.length.toLocaleString()} 段（幹道 ${arterial.toLocaleString()}、次要 ${(roads.length - arterial).toLocaleString()}）`,
+      `  道路 ${roads.length.toLocaleString()} 段（幹道 ${n0.toLocaleString()}、次要 ${n1.toLocaleString()}、街廓 ${n2.toLocaleString()}）、${pts.toLocaleString()} 點`,
     );
   }
 
