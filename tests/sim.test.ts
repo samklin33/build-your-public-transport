@@ -302,6 +302,7 @@ describe('指派守恆', () => {
       name: 'mini',
       bbox: [121.4, 24.9, 122.0, 25.2],
       districts: [{ id: 0, code: 'd0', name: 'd0', county: 'x', population: n * 5000, areaKm2: n }],
+      roads: [],
       zones,
       employmentCenters: [],
       referenceNetwork: { stations: [], lines: [] },

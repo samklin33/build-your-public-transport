@@ -28,9 +28,21 @@ export interface PreparedDistrict {
   population: number;
 }
 
+export interface PreparedRoad {
+  cls: 0 | 1;
+  name: string;
+  /** 投影後的世界座標，扁平化的 [x,y,x,y,...]。 */
+  path: Float32Array;
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
 export interface PreparedCity {
   zones: PreparedZone[];
   districts: PreparedDistrict[];
+  roads: PreparedRoad[];
   /** 世界座標的整體範圍。 */
   minX: number;
   minY: number;
@@ -127,6 +139,24 @@ export function prepareCity(pack: CityPack): PreparedCity {
     };
   });
 
+  const roads: PreparedRoad[] = (pack.roads ?? []).map((r) => {
+    const path = new Float32Array(r.path.length);
+    let rMinX = Infinity;
+    let rMinY = Infinity;
+    let rMaxX = -Infinity;
+    let rMaxY = -Infinity;
+    for (let i = 0; i < r.path.length; i += 2) {
+      const [x, y] = projectMercator(r.path[i], r.path[i + 1]);
+      path[i] = x;
+      path[i + 1] = y;
+      if (x < rMinX) rMinX = x;
+      if (x > rMaxX) rMaxX = x;
+      if (y < rMinY) rMinY = y;
+      if (y > rMaxY) rMaxY = y;
+    }
+    return { cls: r.cls, name: r.name, path, minX: rMinX, minY: rMinY, maxX: rMaxX, maxY: rMaxY };
+  });
+
   const densities = zones.map((z) => z.densityPerKm2).sort((a, b) => a - b);
   const densityP95 = densities[Math.floor(densities.length * 0.95)] || 1;
 
@@ -150,6 +180,7 @@ export function prepareCity(pack: CityPack): PreparedCity {
   return {
     zones,
     districts,
+    roads,
     minX,
     minY,
     maxX,

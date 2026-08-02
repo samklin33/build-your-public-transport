@@ -21,6 +21,7 @@ export function Toolbar() {
   const overlay = useStore((s) => s.overlay);
   const scenario = useStore((s) => s.scenario);
   const showRidership = useStore((s) => s.showRidership);
+  const showRoads = useStore((s) => s.showRoads);
   const draft = useStore((s) => s.draft);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -143,6 +144,10 @@ export function Toolbar() {
         <label className="check">
           <input type="checkbox" checked={showRidership} onChange={() => s.toggleRidership()} />
           路線粗細代表運量
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={showRoads} onChange={() => s.toggleRoads()} />
+          顯示道路（拉近後顯示次要道路）
         </label>
       </section>
 

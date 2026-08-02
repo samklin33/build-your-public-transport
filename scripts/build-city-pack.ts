@@ -14,6 +14,7 @@ import { buildGravityOD } from '../src/sim/demand';
 import type {
   CityPack,
   District,
+  Road,
   PackLine,
   PackNetwork,
   PackStation,
@@ -256,6 +257,14 @@ async function main() {
   const popByDistrict = await readPopulation();
   const rawMrt = await readJson<RawMrt>(resolve(SRC, 'trtc-network.json'));
 
+  // 道路是選用的：還沒跑過 npm run fetch:roads 也要能建出 pack
+  let roads: Road[] = [];
+  try {
+    roads = await readJson<Road[]>(resolve(SRC, 'twn-roads.json'));
+  } catch {
+    console.warn('  ! 找不到 twn-roads.json，這次的 pack 不含道路（先跑 npm run fetch:roads）');
+  }
+
   // ── 行政區
   const districts: District[] = [];
   const districtIndexByCode = new Map<string, number>();
@@ -361,6 +370,12 @@ async function main() {
   }
   const totalJobs = zones.reduce((s, z) => s + z.jobs, 0);
   console.log(`  就業機會推估總數 ${Math.round(totalJobs).toLocaleString()}`);
+  if (roads.length) {
+    const arterial = roads.filter((r) => r.cls === 0).length;
+    console.log(
+      `  道路 ${roads.length.toLocaleString()} 段（幹道 ${arterial.toLocaleString()}、次要 ${(roads.length - arterial).toLocaleString()}）`,
+    );
+  }
 
   // ── 真實捷運路網
   const referenceNetwork = buildReferenceNetwork(rawMrt);
@@ -463,6 +478,7 @@ async function main() {
     bbox: [w, s, e, nBound],
     districts,
     zones,
+    roads,
     employmentCenters: TAIPEI_EMPLOYMENT_CENTERS,
     referenceNetwork,
     costModel: DEFAULT_COST_MODEL,
@@ -491,7 +507,8 @@ async function main() {
       totalPop.toLocaleString(),
     ],
     ['真實捷運 116 站', referenceNetwork.stations.length === 116, `${referenceNetwork.stations.length}`],
-    ['pack 小於 3 MB', mb < 3, `${mb.toFixed(2)} MB`],
+    ['pack 小於 4 MB', mb < 4, `${mb.toFixed(2)} MB`],
+    ['有道路資料', roads.length > 5000, `${roads.length.toLocaleString()} 段`],
     ['IPF 有收斂', iterations < 40, `${iterations} 次疊代`],
   ];
   console.log('\n  驗收：');

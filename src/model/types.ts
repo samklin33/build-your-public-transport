@@ -75,6 +75,19 @@ export interface Zone {
   rings: number[][];
 }
 
+/**
+ * 道路。分兩級就夠了 —— 規劃時真正要回答的是「這條路撐不撐得起軌道運輸」。
+ *   0 幹道（trunk/primary）
+ *   1 次要道路（secondary/tertiary）
+ * 巷弄不收：對路網規劃沒有意義，只會讓資料量爆掉。
+ */
+export interface Road {
+  cls: 0 | 1;
+  name: string;
+  /** 折線，扁平化的 [lon,lat,lon,lat,...]。 */
+  path: number[];
+}
+
 export interface EmploymentCenter {
   name: string;
   lon: number;
@@ -182,6 +195,8 @@ export interface CityPack {
   bbox: [number, number, number, number];
   districts: District[];
   zones: Zone[];
+  /** 主要道路。空陣列代表這座城市還沒有道路資料。 */
+  roads: Road[];
   employmentCenters: EmploymentCenter[];
   /** 現實世界既有路網，供「現況延伸」情境與校準對照使用。 */
   referenceNetwork: PackNetwork;

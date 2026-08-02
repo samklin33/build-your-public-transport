@@ -46,6 +46,7 @@ interface State {
 
   overlay: Overlay;
   showRidership: boolean;
+  showRoads: boolean;
 
   init: () => Promise<void>;
   setScenario: (s: Scenario) => void;
@@ -64,6 +65,7 @@ interface State {
   deleteLine: (id: string) => void;
   setOverlay: (o: Overlay) => void;
   toggleRidership: () => void;
+  toggleRoads: () => void;
   loadRealNetwork: () => void;
   exportJson: () => string;
   importJson: (text: string) => void;
@@ -134,6 +136,7 @@ export const useStore = create<State>((set, get) => ({
 
   overlay: 'density',
   showRidership: true,
+  showRoads: true,
 
   async init() {
     try {
@@ -319,6 +322,10 @@ export const useStore = create<State>((set, get) => ({
 
   toggleRidership() {
     set({ showRidership: !get().showRidership });
+  },
+
+  toggleRoads() {
+    set({ showRoads: !get().showRoads });
   },
 
   loadRealNetwork() {

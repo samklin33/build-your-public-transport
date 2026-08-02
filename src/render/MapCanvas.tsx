@@ -84,6 +84,7 @@ export function MapCanvas() {
         result: state.result,
         overlay: state.overlay,
         showRidership: state.showRidership,
+        showRoads: state.showRoads,
         draft: state.draft,
         draftColor: pack.costModel.modes[state.drawMode].color,
         selectedLineId: state.selectedLineId,

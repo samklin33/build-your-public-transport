@@ -15,6 +15,7 @@
 ```bash
 npm install
 npm run build:pack     # 由 data/sources/ 產生城市資料（原始資料已在 repo 裡）
+# 道路資料要另外抓一次（已 commit，通常不用重跑）：npm run fetch:roads
 npm run dev            # http://localhost:5173
 ```
 
@@ -87,7 +88,8 @@ npm run build:single   # 產生單檔版 dist-single/index.html
 |---|---|---|
 | 村里界與行政區界（41 區 / 1465 村里） | 內政部（經 npm `taiwan-atlas`） | 2021 |
 | 各鄉鎮市區人口（總計 6,669,946 人） | 內政部戶政司 | 民國 106 年 |
-| 台北捷運站點與站序（116 站 / 7 條分支） | OpenStreetMap route relation | 2026 |
+| 台北捷運站點與站序（116 站 / 7 條分支）與實際軌道走線 | OpenStreetMap route relation | 2026 |
+| 雙北主要道路（11,236 段幹道與次要道路） | OpenStreetMap（經 [game-project](https://github.com/samklin33/game-project) 擷取） | 2026 |
 
 **村里層級人口**是由區級往下推估的，**就業分布**沒有開放資料、是用就業中心模型合成的。
 兩者都在 UI 的「資料來源」視窗與 `docs/simulation.md` 中明確標示。

@@ -74,6 +74,15 @@ export const TAIPEI_SOURCES: SourceRef[] = [
     note: '站序取自 route relation，共 116 站、7 條路線分支，含官方線色與尖離峰班距。',
   },
   {
+    name: '雙北主要道路',
+    provider: 'OpenStreetMap（經 samklin33/game-project 擷取）',
+    year: '2026',
+    url: 'https://github.com/samklin33/game-project',
+    note:
+      '幹道（trunk/primary）與次要道路（secondary/tertiary）共 11,236 段。' +
+      '巷弄未收錄。幾何已用 Douglas–Peucker 以 10 公尺容差簡化。',
+  },
+  {
     name: '就業人口分布',
     provider: '本專案模型推估',
     year: '—',

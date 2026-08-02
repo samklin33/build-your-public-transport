@@ -1,96 +1,71 @@
 /**
- * 抓取雙北的主要道路 → data/sources/twn-roads.geojson
- *
- * 為什麼跟 fetch-sources 分開：Overpass 的查詢很重（要跑一兩分鐘），
- * 而且不是每次更新資料都需要重抓道路。
+ * 抓取雙北的道路 → data/sources/twn-roads.json
  *
  * 執行：npm run fetch:roads
  *
- * ⚠️ 需要能連到 overpass-api.de。開發這支程式的環境連不到，
- * 因此「查詢本身」沒有實測過，只有解析與輸出的部分有用真實的
- * Overpass GeoJSON 輸出測過（tests/roads.test.ts）。
- * 第一次跑如果失敗，把 Overpass 回來的原始內容貼出來就能修。
+ * 資料來源是 samklin33/game-project 已經 commit 進 repo 的道路 GeoJSON
+ * （臺北市 + 新北市，由 Overpass 抓好）。直接用現成的有幾個好處：
+ *   - 不必每次都跑一次要花好幾分鐘的 Overpass 查詢
+ *   - 範圍正好就是雙北
+ *   - 它的 tier 欄位是由 OSM highway 等級推出來的，可以對應回道路分級
+ *
+ * 想從 OSM 原始資料重新產生的話，那個 repo 的 scripts/build_roads.py 就是
+ * 產生器（需要能連到 Overpass）。
  */
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseOverpassRoads, ROAD_CLASSES } from './roads-parse';
+import { parseNamedRoads, type Road } from './roads-parse';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = resolve(ROOT, 'data/sources');
 
-/** 雙北都會區的範圍。山區的產業道路對路網規劃沒意義，所以只取都市化的部分。 */
-const BBOX = { south: 24.85, west: 121.25, north: 25.32, east: 121.78 };
-
-const ENDPOINTS = [
-  'https://overpass-api.de/api/interpreter',
-  'https://overpass.kumi.systems/api/interpreter',
+const SOURCES = [
+  {
+    city: '臺北市',
+    url: 'https://raw.githubusercontent.com/samklin33/game-project/main/data/taipei.geojson',
+  },
+  {
+    city: '新北市',
+    url: 'https://raw.githubusercontent.com/samklin33/game-project/main/data/newtaipei.geojson',
+  },
 ];
 
-function buildQuery(): string {
-  const b = `${BBOX.south},${BBOX.west},${BBOX.north},${BBOX.east}`;
-  const classes = ROAD_CLASSES.join('|');
-  return `
-[out:json][timeout:180];
-(
-  way["highway"~"^(${classes})$"](${b});
-);
-out geom;
-`.trim();
-}
-
-async function fetchOverpass(query: string): Promise<unknown> {
-  let lastErr: unknown;
-  for (const url of ENDPOINTS) {
-    try {
-      console.log(`  查詢 ${url} …`);
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ data: query }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
-      return await res.json();
-    } catch (err) {
-      console.warn(`  ! ${url} 失敗：${err instanceof Error ? err.message : err}`);
-      lastErr = err;
-    }
-  }
-  throw lastErr ?? new Error('所有 Overpass 端點都失敗');
-}
+/** 簡化容差（公尺）。這個遊戲的縮放層級下 10 公尺的偏差看不出來。 */
+const SIMPLIFY_M = 10;
 
 async function main() {
   await mkdir(OUT, { recursive: true });
-  console.log('抓取雙北主要道路（Overpass）');
-  console.log(`  範圍 ${BBOX.south},${BBOX.west} – ${BBOX.north},${BBOX.east}`);
-  console.log(`  道路等級 ${ROAD_CLASSES.join(', ')}`);
+  console.log('抓取雙北道路');
 
-  const raw = await fetchOverpass(buildQuery());
-  const fc = parseOverpassRoads(raw);
-
-  if (fc.features.length === 0) {
-    throw new Error('沒有解析到任何道路 —— 查詢或回應格式可能不如預期');
+  const roads: Road[] = [];
+  for (const src of SOURCES) {
+    const res = await fetch(src.url);
+    if (!res.ok) throw new Error(`下載失敗 ${res.status} ${res.statusText}: ${src.url}`);
+    const raw = await res.json();
+    const parsed = parseNamedRoads(raw, SIMPLIFY_M);
+    const pts = parsed.reduce((a, r) => a + r.path.length / 2, 0);
+    console.log(
+      `  ${src.city}：${parsed.length.toLocaleString()} 段、${pts.toLocaleString()} 點`,
+    );
+    roads.push(...parsed);
   }
 
-  const path = resolve(OUT, 'twn-roads.geojson');
-  const json = JSON.stringify(fc);
+  if (roads.length === 0) throw new Error('沒有解析到任何道路');
+
+  const path = resolve(OUT, 'twn-roads.json');
+  const json = JSON.stringify(roads);
   await writeFile(path, json);
 
-  const byClass = new Map<string, number>();
-  for (const f of fc.features) {
-    byClass.set(f.properties.highway, (byClass.get(f.properties.highway) ?? 0) + 1);
-  }
+  const arterial = roads.filter((r) => r.cls === 0).length;
+  const totalPts = roads.reduce((a, r) => a + r.path.length / 2, 0);
   console.log(`\n  ✓ ${path.replace(ROOT + '/', '')} (${(json.length / 1024 / 1024).toFixed(2)} MB)`);
-  console.log(`  路段 ${fc.features.length.toLocaleString()} 條`);
-  for (const [k, v] of [...byClass].sort((a, b) => b[1] - a[1])) {
-    console.log(`    ${k.padEnd(12)} ${v.toLocaleString()}`);
-  }
+  console.log(`  幹道 ${arterial.toLocaleString()} 段 / 次要道路 ${(roads.length - arterial).toLocaleString()} 段`);
+  console.log(`  座標點 ${totalPts.toLocaleString()}（簡化容差 ${SIMPLIFY_M} m）`);
   console.log('\n完成。接著執行 npm run build:pack');
 }
 
 main().catch((err) => {
   console.error('\n✗ fetch-roads 失敗:', err instanceof Error ? err.message : err);
-  console.error('\n如果是連線問題，可以改用 overpass-turbo.eu 手動跑這段查詢並存成檔案：\n');
-  console.error(buildQuery());
   process.exit(1);
 });

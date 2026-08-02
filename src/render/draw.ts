@@ -89,6 +89,8 @@ export interface DrawOptions {
   result: SimResult | null;
   overlay: Overlay;
   showRidership: boolean;
+  /** 是否顯示道路底圖。 */
+  showRoads: boolean;
   draft: string[];
   draftColor: string;
   selectedLineId: string | null;
@@ -113,6 +115,7 @@ export function draw(ctx: CanvasRenderingContext2D, o: DrawOptions): void {
   const vMaxY = cam.cy + halfH;
 
   drawZones(ctx, o, vMinX, vMinY, vMaxX, vMaxY);
+  drawRoads(ctx, o, vMinX, vMinY, vMaxX, vMaxY);
   drawNetwork(ctx, o);
   drawDraft(ctx, o);
   drawStations(ctx, o);
@@ -151,6 +154,66 @@ function drawZones(
     ctx.fillStyle = zoneFill(z, city, overlay, result);
     ctx.fill();
     if (showStroke) ctx.stroke();
+  }
+}
+
+/**
+ * 道路底圖。
+ *
+ * 次要道路只在拉近後才畫 —— 全區都畫的話畫面會糊成一片，
+ * 而且拉遠時看幹道骨架反而比較容易判斷路廊在哪。
+ * 道路要畫在人口著色之上、路線之下：它是底圖的一部分，不該蓋掉路線。
+ */
+function drawRoads(
+  ctx: CanvasRenderingContext2D,
+  o: DrawOptions,
+  vMinX: number,
+  vMinY: number,
+  vMaxX: number,
+  vMaxY: number,
+): void {
+  const { cam, city, showRoads } = o;
+  if (!showRoads || city.roads.length === 0) return;
+
+  const showSecondary = cam.scale > 260_000;
+
+  /** 把同一級的道路併成一條 path，只描邊一次 —— 比每條各描一次快得多。 */
+  const tracePath = (cls: number) => {
+    ctx.beginPath();
+    for (const r of city.roads) {
+      if (r.cls !== cls) continue;
+      if (r.maxX < vMinX || r.minX > vMaxX || r.maxY < vMinY || r.minY > vMaxY) continue;
+      const p = r.path;
+      const [sx, sy] = worldToScreen(cam, p[0], p[1]);
+      ctx.moveTo(sx, sy);
+      for (let i = 2; i < p.length; i += 2) {
+        const [px, py] = worldToScreen(cam, p[i], p[i + 1]);
+        ctx.lineTo(px, py);
+      }
+    }
+  };
+
+  const arterialW = Math.min(3.2, 1.0 + cam.scale / 700_000);
+  const secondaryW = Math.min(1.8, 0.6 + cam.scale / 1_400_000);
+
+  // 深色外框 + 淺色內芯。單用淺色的話，道路在人口密度圖亮黃色的市中心會整個消失，
+  // 反而只剩山區看得到 —— 正好跟需要看清楚的地方相反。
+  // 外框讓道路在任何底色上都讀得出來。
+  const passes: [number, number, string, string][] = showSecondary
+    ? [
+        [1, secondaryW, 'rgba(8,14,22,0.55)', 'rgba(226,238,255,0.34)'],
+        [0, arterialW, 'rgba(8,14,22,0.75)', 'rgba(240,247,255,0.78)'],
+      ]
+    : [[0, arterialW, 'rgba(8,14,22,0.70)', 'rgba(240,247,255,0.70)']];
+
+  for (const [cls, w, casing, core] of passes) {
+    tracePath(cls);
+    ctx.strokeStyle = casing;
+    ctx.lineWidth = w + 1.8;
+    ctx.stroke();
+    ctx.strokeStyle = core;
+    ctx.lineWidth = w;
+    ctx.stroke();
   }
 }
 
