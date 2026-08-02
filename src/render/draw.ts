@@ -179,8 +179,6 @@ function drawNetwork(ctx: CanvasRenderingContext2D, o: DrawOptions): void {
       const a = network.stations[line.stationIds[i]];
       const b = network.stations[line.stationIds[i + 1]];
       if (!a || !b) continue;
-      const [ax, ay] = lonLatToScreen(cam, a.lon, a.lat);
-      const [bx, by] = lonLatToScreen(cam, b.lon, b.lat);
 
       let width = selected ? 5 : 3.5;
       if (maxLoad > 0) {
@@ -189,20 +187,35 @@ function drawNetwork(ctx: CanvasRenderingContext2D, o: DrawOptions): void {
         width = 1.5 + Math.sqrt(load / maxLoad) * 11;
       }
 
+      // 有實際走線就照著畫，路線才會是真實的彎曲形狀而不是站對站的直線。
+      const shape = line.segmentShapes?.[i];
+      const trace = () => {
+        ctx.beginPath();
+        if (shape && shape.length >= 4) {
+          const [sx, sy] = lonLatToScreen(cam, shape[0], shape[1]);
+          ctx.moveTo(sx, sy);
+          for (let k = 2; k < shape.length; k += 2) {
+            const [px, py] = lonLatToScreen(cam, shape[k], shape[k + 1]);
+            ctx.lineTo(px, py);
+          }
+        } else {
+          const [ax, ay] = lonLatToScreen(cam, a.lon, a.lat);
+          const [bx, by] = lonLatToScreen(cam, b.lon, b.lat);
+          ctx.moveTo(ax, ay);
+          ctx.lineTo(bx, by);
+        }
+      };
+
       if (selected) {
         ctx.strokeStyle = 'rgba(255,255,255,0.85)';
         ctx.lineWidth = width + 4;
-        ctx.beginPath();
-        ctx.moveTo(ax, ay);
-        ctx.lineTo(bx, by);
+        trace();
         ctx.stroke();
       }
 
       ctx.strokeStyle = line.color;
       ctx.lineWidth = width;
-      ctx.beginPath();
-      ctx.moveTo(ax, ay);
-      ctx.lineTo(bx, by);
+      trace();
       ctx.stroke();
     }
   }

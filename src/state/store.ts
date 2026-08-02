@@ -41,6 +41,7 @@ interface State {
   /** 正在繪製中的路線站點。 */
   draft: string[];
   selectedLineId: string | null;
+  selectedStationId: string | null;
   hoverStationId: string | null;
 
   overlay: Overlay;
@@ -55,6 +56,8 @@ interface State {
   finishDraft: () => void;
   cancelDraft: () => void;
   selectLine: (id: string | null) => void;
+  selectStation: (id: string | null) => void;
+  renameStation: (id: string, name: string) => void;
   setHoverStation: (id: string | null) => void;
   setLineHeadway: (id: string, sec: number) => void;
   renameLine: (id: string, name: string) => void;
@@ -126,6 +129,7 @@ export const useStore = create<State>((set, get) => ({
   drawMode: 'metro_underground',
   draft: [],
   selectedLineId: null,
+  selectedStationId: null,
   hoverStationId: null,
 
   overlay: 'density',
@@ -183,7 +187,7 @@ export const useStore = create<State>((set, get) => ({
     if (!pack) return;
     const network =
       s === 'extend' ? packNetworkToNetwork(pack.referenceNetwork) : emptyNetwork();
-    set({ scenario: s, network, draft: [], selectedLineId: null, result: null });
+    set({ scenario: s, network, draft: [], selectedLineId: null, selectedStationId: null, result: null });
     scheduleSim(get, set);
   },
 
@@ -264,6 +268,19 @@ export const useStore = create<State>((set, get) => ({
     set({ selectedLineId: id });
   },
 
+  selectStation(id) {
+    set({ selectedStationId: id });
+  },
+
+  renameStation(id, name) {
+    const next = cloneNetwork(get().network);
+    const st = next.stations[id];
+    if (!st) return;
+    st.name = name;
+    // 改名不影響任何模擬結果，不用重跑。
+    set({ network: next });
+  },
+
   setHoverStation(id) {
     if (get().hoverStationId !== id) set({ hoverStationId: id });
   },
@@ -333,6 +350,7 @@ export const useStore = create<State>((set, get) => ({
         scenario: data.scenario ?? 'blank',
         draft: [],
         selectedLineId: null,
+        selectedStationId: null,
       });
       scheduleSim(get, set);
     } catch (err) {

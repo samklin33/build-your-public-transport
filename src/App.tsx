@@ -3,6 +3,7 @@ import { MapCanvas } from './render/MapCanvas';
 import { useStore } from './state/store';
 import { LinePanel } from './ui/LinePanel';
 import { ResultsPanel } from './ui/ResultsPanel';
+import { StationPanel } from './ui/StationPanel';
 import { Toolbar } from './ui/Toolbar';
 
 export function App() {
@@ -42,6 +43,7 @@ export function App() {
       <main className="map-area">
         <MapCanvas />
         <LinePanel />
+        <StationPanel />
         <button className="sources-btn" onClick={() => setShowSources(true)}>
           資料來源
         </button>

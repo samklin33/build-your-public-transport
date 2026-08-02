@@ -1,4 +1,4 @@
-import { kmBetween } from '../model/geo';
+import { kmBetween, polylineKm } from '../model/geo';
 import type { CostModel, Network, SimParams } from '../model/types';
 
 /**
@@ -131,7 +131,15 @@ export function buildTransitGraph(
     for (let i = 0; i < stops.length - 1; i++) {
       const a = stationIndex.get(stops[i])!;
       const b = stationIndex.get(stops[i + 1])!;
-      const km = kmBetween(stationLon[a], stationLat[a], stationLon[b], stationLat[b]);
+
+      // 有實際走線就用實際長度；沒有（玩家自己畫的線）就用直線乘上走線係數。
+      // 直接拿直線距離當路線長度會系統性低估 —— 真實台北捷運少算 8%。
+      const shape = line.segmentShapes?.[i];
+      const km =
+        shape && shape.length >= 4
+          ? polylineKm(shape)
+          : kmBetween(stationLon[a], stationLat[a], stationLon[b], stationLat[b]) *
+            spec.alignmentFactor;
       lineKm[lineIdx] += km;
       const rideMin = (km / spec.avgSpeedKmh) * 60 + dwellMin;
 

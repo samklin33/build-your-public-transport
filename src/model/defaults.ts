@@ -22,6 +22,7 @@ export const DEFAULT_MODES: Record<TransitMode, ModeSpec> = {
     maxHeadwaySec: 900,
     defaultHeadwaySec: 240,
     riverCrossingMultiplier: 1.6,
+    alignmentFactor: 1.10,
     color: '#0070BD',
   },
   metro_elevated: {
@@ -37,6 +38,7 @@ export const DEFAULT_MODES: Record<TransitMode, ModeSpec> = {
     maxHeadwaySec: 900,
     defaultHeadwaySec: 300,
     riverCrossingMultiplier: 1.25,
+    alignmentFactor: 1.12,
     color: '#C48C31',
   },
   lrt: {
@@ -52,6 +54,7 @@ export const DEFAULT_MODES: Record<TransitMode, ModeSpec> = {
     maxHeadwaySec: 900,
     defaultHeadwaySec: 360,
     riverCrossingMultiplier: 1.4,
+    alignmentFactor: 1.20,
     color: '#00A0A0',
   },
   bus: {
@@ -67,6 +70,7 @@ export const DEFAULT_MODES: Record<TransitMode, ModeSpec> = {
     maxHeadwaySec: 1800,
     defaultHeadwaySec: 480,
     riverCrossingMultiplier: 1.0,
+    alignmentFactor: 1.35,
     color: '#7A5AA8',
   },
 };
@@ -98,7 +102,7 @@ export const DEFAULT_SIM_PARAMS: SimParams = {
   congestionAlpha: 0.6,
   congestionBeta: 4,
   detourFactor: 1.32,
-  logitConstant: -0.8,
+  logitConstant: -0.87,
   logitTimeCoef: 0.11,
   odTopK: 50,
 };

@@ -20,6 +20,7 @@ export function packNetworkToNetwork(pn: PackNetwork): Network {
       mode: l.mode,
       stationIds: [...l.stationIds],
       headwaySec: l.headwaySec,
+      segmentShapes: l.segmentShapes,
     })),
   };
 }

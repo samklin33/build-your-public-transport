@@ -20,6 +20,15 @@ export function kmBetween(
   return Math.sqrt(dx * dx + dy * dy) * R_KM;
 }
 
+/** 扁平化 [lon,lat,lon,lat,...] 折線的長度（公里）。 */
+export function polylineKm(flat: number[]): number {
+  let km = 0;
+  for (let i = 0; i + 3 < flat.length; i += 2) {
+    km += kmBetween(flat[i], flat[i + 1], flat[i + 2], flat[i + 3]);
+  }
+  return km;
+}
+
 /** Web Mercator 投影，輸出為 0..1 的正規化世界座標（y 軸向下，符合畫布慣例）。 */
 export function projectMercator(lon: number, lat: number): [number, number] {
   const x = (lon + 180) / 360;

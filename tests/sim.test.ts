@@ -90,8 +90,30 @@ describe('transit graph + Dijkstra', () => {
     const expected =
       wait + ride(g.segmentKm[0]) + ride(g.segmentKm[2]) + params.transferPenaltyMin;
 
-    expect(g.segmentKm[0]).toBeCloseTo(3.5, 1);
+    // 玩家畫的線沒有實際走線資料，長度會乘上走線係數（真實路線不是直線）
+    const af = DEFAULT_COST_MODEL.modes.metro_underground.alignmentFactor;
+    expect(g.segmentKm[0]).toBeCloseTo(3.5 * af, 1);
     expect(d.dist[c]).toBeCloseTo(expected, 3);
+  });
+
+  it('沒有走線資料時，長度會套用走線係數', () => {
+    const g = buildTransitGraph(lineNetwork(10, 2, 240), params, DEFAULT_COST_MODEL);
+    const af = DEFAULT_COST_MODEL.modes.metro_underground.alignmentFactor;
+    expect(af).toBeGreaterThan(1);
+    expect(g.lineKm[0]).toBeCloseTo(10 * af, 1);
+  });
+
+  it('有實際走線時，用走線長度而不是直線距離', () => {
+    // 造一段刻意繞路的走線：兩站直線 10 km，但走線往北繞一大圈
+    const net = lineNetwork(10, 2, 240);
+    const a = net.stations['s0'];
+    const b = net.stations['s1'];
+    net.lines[0].segmentShapes = [
+      [a.lon, a.lat, a.lon, a.lat + 0.05, b.lon, b.lat + 0.05, b.lon, b.lat],
+    ];
+    const g = buildTransitGraph(net, params, DEFAULT_COST_MODEL);
+    // 繞路的走線一定比直線長，而且不等於「直線 × 係數」
+    expect(g.lineKm[0]).toBeGreaterThan(10 * 1.5);
   });
 
   it('班距越短候車越少，總時間跟著變短', () => {
@@ -328,14 +350,15 @@ describe('成本模型', () => {
     const net = lineNetwork(3.5, 5, 240); // 4 段 × 3.5 km = 14 km，5 站
     const g = buildTransitGraph(net, DEFAULT_SIM_PARAMS, DEFAULT_COST_MODEL);
     const km = g.lineKm[0];
-    expect(km).toBeCloseTo(14, 1);
+    // 4 段 × 3.5 km 的直線，再乘上走線係數
+    expect(km).toBeCloseTo(14 * spec.alignmentFactor, 1);
     expect(g.lineStops[0]).toBe(5);
     const cost = km * spec.buildCostPerKm + g.lineStops[0] * spec.stationCost;
     // 用圖自己量到的長度算預期值，避免測試被經緯度換算的近似誤差絆倒
     expect(cost).toBeCloseTo(km * 40 + 5 * 25, 6);
-    // 量級檢查：14 km 的地下捷運加 5 站約 685 億
-    expect(cost).toBeGreaterThan(670);
-    expect(cost).toBeLessThan(700);
+    // 量級檢查：約 15.4 km 的地下捷運加 5 站約 740 億
+    expect(cost).toBeGreaterThan(720);
+    expect(cost).toBeLessThan(760);
   });
 
   it('地下造價高於高架，高架高於輕軌，輕軌高於公車', () => {

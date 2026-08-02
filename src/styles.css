@@ -628,3 +628,86 @@ code {
   color: var(--accent);
   word-break: break-all;
 }
+
+/* ── 車站面板 ───────────────────────────── */
+.panel-station {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  width: 216px;
+  background: rgba(20, 29, 41, 0.94);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+}
+.station-head {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.station-head h2 {
+  flex: 1;
+  margin: 0;
+}
+.field {
+  display: block;
+  margin-bottom: 10px;
+}
+.field > span {
+  display: block;
+  font-size: 11px;
+  color: var(--dim);
+  margin-bottom: 3px;
+}
+.station-name {
+  width: 100%;
+  background: #0e1620;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  padding: 6px 8px;
+}
+.station-name:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.station-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+}
+.station-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+.station-line:hover {
+  background: #1d2f45;
+}
+.station-stats {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+}
+.station-stats > div {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+}
+.station-stats b {
+  font-variant-numeric: tabular-nums;
+}

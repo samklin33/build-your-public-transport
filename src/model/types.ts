@@ -34,6 +34,16 @@ export interface ModeSpec {
   defaultHeadwaySec: number;
   /** 跨河路段的造價加成倍率。 */
   riverCrossingMultiplier: number;
+  /**
+   * 走線係數：實際路線長度 ÷ 兩站直線距離。
+   *
+   * 真實路線不可能是直線 —— 要沿著路廊、避開建物、配合地形。
+   * 玩家畫的線沒有實際走線資料，就用這個係數把長度修正回合理值，
+   * 否則建設成本與行駛時間都會被系統性低估。
+   * 軌道系統的 1.10 是從真實台北捷運量出來的（159.1 km ÷ 145.3 km）；
+   * 公車必須沿著街廓走，繞得更多。
+   */
+  alignmentFactor: number;
   /** 預設畫線顏色。 */
   color: string;
 }
@@ -89,6 +99,14 @@ export interface PackLine {
   mode: TransitMode;
   stationIds: string[];
   headwaySec: number;
+  /**
+   * 每一段（第 i 站到第 i+1 站）的實際走線，扁平化的 [lon,lat,lon,lat,...]。
+   * 長度為 stationIds.length - 1。沒有這筆資料時就退回兩站之間的直線。
+   *
+   * 真實路線是彎的：文湖線兩站直線相加只有 22.2 km，實際軌道長 27.4 km，
+   * 少算 19%。整個台北捷運少算 9%，換算成建設成本就是 552 億。
+   */
+  segmentShapes?: number[][];
 }
 
 export interface PackNetwork {
@@ -189,6 +207,8 @@ export interface Line {
   mode: TransitMode;
   stationIds: string[];
   headwaySec: number;
+  /** 實際走線，見 PackLine.segmentShapes。玩家自己畫的線沒有這筆資料。 */
+  segmentShapes?: number[][];
 }
 
 export interface Network {

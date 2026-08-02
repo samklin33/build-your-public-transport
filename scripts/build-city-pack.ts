@@ -114,8 +114,77 @@ type RawMrt = {
     color: string;
     peakHeadwaySec?: number;
     stations: { name: string; lat: number; lon: number }[];
+    /** 實際軌道走線，[[lat, lon], ...]，取自 OSM 的 railway ways。 */
+    shape?: [number, number][];
+    shapeLen?: number;
   }[];
 };
+
+/**
+ * 把整條線的走線切成「每兩站之間」一段。
+ *
+ * 走線是沿著路線順序排的點列，車站則落在這條線附近。作法是依站序往前掃，
+ * 為每一站找到走線上最接近的頂點，再從那些切點把走線切開。
+ * 掃描起點只往前不回頭，這樣環狀線或折返路段才不會把站對到線的另一頭。
+ */
+function splitShapeAtStations(
+  shape: [number, number][],
+  stations: { lat: number; lon: number }[],
+): number[][] | undefined {
+  if (!shape || shape.length < 2 || stations.length < 2) return undefined;
+
+  const cuts: number[] = [];
+  let from = 0;
+  for (let s = 0; s < stations.length; s++) {
+    const st = stations[s];
+    // 最後一站必須對到走線尾端之前的某處，保留剩餘站數的空間
+    const limit = shape.length - (stations.length - 1 - s) - 1;
+    let best = from;
+    let bestKm = Infinity;
+    for (let i = from; i <= Math.max(from, limit); i++) {
+      const km = kmBetween(st.lon, st.lat, shape[i][1], shape[i][0]);
+      if (km < bestKm) {
+        bestKm = km;
+        best = i;
+      }
+    }
+    cuts.push(best);
+    from = Math.max(best, from);
+  }
+
+  const segs: number[][] = [];
+  for (let i = 0; i < cuts.length - 1; i++) {
+    const a = cuts[i];
+    const b = cuts[i + 1];
+    const flat: number[] = [];
+    if (b > a) {
+      for (let k = a; k <= b; k++) {
+        flat.push(shape[k][1], shape[k][0]); // [lon, lat]
+      }
+    }
+    // 切點重疊（站對到同一個頂點）就退回直線
+    if (flat.length < 4) {
+      flat.length = 0;
+      flat.push(
+        stations[i].lon,
+        stations[i].lat,
+        stations[i + 1].lon,
+        stations[i + 1].lat,
+      );
+    }
+    segs.push(flat);
+  }
+  return segs;
+}
+
+/** 扁平化 [lon,lat,...] 折線的長度（公里）。 */
+function polylineKm(flat: number[]): number {
+  let km = 0;
+  for (let i = 0; i + 3 < flat.length; i += 2) {
+    km += kmBetween(flat[i], flat[i + 1], flat[i + 2], flat[i + 3]);
+  }
+  return km;
+}
 
 /**
  * 真實路網的尖峰班距（秒）。
@@ -165,6 +234,7 @@ function buildReferenceNetwork(raw: RawMrt): PackNetwork {
       mode: 'metro_underground' as TransitMode,
       stationIds,
       headwaySec: REAL_PEAK_HEADWAY_SEC[L.id] ?? L.peakHeadwaySec ?? 300,
+      segmentShapes: L.shape ? splitShapeAtStations(L.shape, L.stations) : undefined,
     });
   }
 
@@ -297,6 +367,37 @@ async function main() {
   console.log(
     `  真實路網：${referenceNetwork.stations.length} 站 / ${referenceNetwork.lines.length} 條路線分支`,
   );
+
+  // 驗證走線切割：各段長度加總應該接近原始的 shapeLen，
+  // 差太多代表站點對錯了走線上的位置。
+  let shapeOk = true;
+  let totalStraight = 0;
+  let totalReal = 0;
+  for (const L of referenceNetwork.lines) {
+    const raw = rawMrt.lines.find((r) => `ref-${r.id}` === L.id);
+    if (!L.segmentShapes || !raw?.shapeLen) continue;
+    const sum = L.segmentShapes.reduce((a, s) => a + polylineKm(s), 0);
+    let straight = 0;
+    for (let i = 0; i < L.stationIds.length - 1; i++) {
+      const a = referenceNetwork.stations.find((s) => s.id === L.stationIds[i])!;
+      const b = referenceNetwork.stations.find((s) => s.id === L.stationIds[i + 1])!;
+      straight += kmBetween(a.lon, a.lat, b.lon, b.lat);
+    }
+    totalStraight += straight;
+    totalReal += sum;
+    const drift = Math.abs(sum - raw.shapeLen) / raw.shapeLen;
+    if (drift > 0.15) {
+      console.warn(
+        `  ! ${L.name} 走線切割後 ${sum.toFixed(1)} km 與原始 ${raw.shapeLen.toFixed(1)} km 差 ${(drift * 100).toFixed(0)}%`,
+      );
+      shapeOk = false;
+    }
+  }
+  console.log(
+    `  走線：直線相加 ${totalStraight.toFixed(1)} km → 實際走線 ${totalReal.toFixed(1)} km ` +
+      `（直線低估 ${(((totalReal - totalStraight) / totalReal) * 100).toFixed(0)}%）`,
+  );
+  if (!shapeOk) throw new Error('走線切割與原始長度差異過大，站點可能對錯位置');
 
   // ── 起訖矩陣
   console.log('  計算重力模型起訖矩陣…');

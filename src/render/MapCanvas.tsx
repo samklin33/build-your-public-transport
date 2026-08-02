@@ -190,6 +190,7 @@ export function MapCanvas() {
             hit = s.id;
           }
         }
+        state.selectStation(hit);
         const line = hit
           ? state.network.lines.find((l) => l.stationIds.includes(hit!))
           : null;
