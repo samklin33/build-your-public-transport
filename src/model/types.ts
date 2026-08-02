@@ -86,6 +86,16 @@ export interface Road {
   name: string;
   /** 折線，扁平化的 [lon,lat,lon,lat,...]。 */
   path: number[];
+  /**
+   * 立體交叉（橋樑／隧道／高架）。只有從 Overpass 原始資料抓的版本才有。
+   * 公車繞徑必須排除這些路段，否則會在建國高架跨越忠孝東路的地方
+   * 生出不存在的路口，讓公車從地面開上高架橋。
+   */
+  gradeSeparated?: boolean;
+  /** 單行道。 */
+  oneway?: boolean;
+  /** 公車可否行駛（國道與快速道路為 false）。 */
+  busUsable?: boolean;
 }
 
 /** 水域多邊形（外環，扁平化的 [lon,lat,...]）。 */

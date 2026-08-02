@@ -175,6 +175,87 @@ export interface Road {
   name: string;
   /** 折線，扁平化的 [lon,lat,lon,lat,...]。 */
   path: number[];
+  /**
+   * 立體交叉（橋樑、隧道、高架）。
+   *
+   * 這是公車繞徑能不能做對的關鍵。切節點時，兩條路的幾何交叉不代表
+   * 現實中能轉彎 —— 建國高架跨過忠孝東路，在平面資料上就是一個交叉點。
+   * 沒有這個旗標，公車會從地面直接開上高架橋，而且路線看起來很合理。
+   */
+  gradeSeparated?: boolean;
+  /** 單行道。繞徑時方向要受限。 */
+  oneway?: boolean;
+  /** 公車可否行駛。快速道路與國道排除（BRT 另計）。 */
+  busUsable?: boolean;
+}
+
+/** OSM highway 等級 → 遊戲的三級分類。 */
+const HIGHWAY_TO_CLASS: Record<string, RoadClass | undefined> = {
+  motorway: 0,
+  trunk: 0,
+  primary: 0,
+  motorway_link: 0,
+  trunk_link: 0,
+  primary_link: 0,
+  secondary: 1,
+  tertiary: 1,
+  secondary_link: 1,
+  residential: 2,
+  unclassified: 2,
+  living_street: 2,
+};
+
+/** 公車不能走的等級：國道與快速道路。 */
+const BUS_EXCLUDED = new Set(['motorway', 'motorway_link', 'trunk', 'trunk_link']);
+
+/**
+ * 從 Overpass 原始輸出解析，保留公車繞徑需要的標籤。
+ *
+ * 跟 parseNamedRoads（讀 game-project 的成品）的差別就在這裡：
+ * 那份資料把 trunk 與 primary 合併、也沒有 bridge/tunnel/layer，
+ * 拿來做繞徑會在每個立體交叉生出假路口。
+ */
+export function parseOverpassRoadsDetailed(
+  raw: unknown,
+  simplifyToleranceM = 10,
+  localToleranceM = 25,
+): Road[] {
+  const data = raw as { elements?: OverpassElement[] };
+  if (!data || !Array.isArray(data.elements)) {
+    throw new Error('Overpass 回應沒有 elements 陣列');
+  }
+
+  const out: Road[] = [];
+  for (const el of data.elements) {
+    if (el.type !== 'way' || !el.geometry || el.geometry.length < 2) continue;
+    const tags = el.tags ?? {};
+    const hw = tags.highway;
+    if (!hw) continue;
+    const cls = HIGHWAY_TO_CLASS[hw];
+    if (cls === undefined) continue;
+
+    const pts: [number, number][] = el.geometry.map((g) => [g.lon, g.lat]);
+    const simplified = simplifyPath(pts, cls === 2 ? localToleranceM : simplifyToleranceM);
+    if (simplified.length < 2) continue;
+    const path: number[] = [];
+    for (const [lon, lat] of simplified) path.push(round5(lon), round5(lat));
+
+    // layer 非 0 也算立體交叉 —— 高架道路常只標 layer 而沒標 bridge
+    const layer = num(tags.layer) ?? 0;
+    const gradeSeparated =
+      tags.bridge === 'yes' ||
+      tags.tunnel === 'yes' ||
+      (tags.bridge !== undefined && tags.bridge !== 'no') ||
+      (tags.tunnel !== undefined && tags.tunnel !== 'no') ||
+      layer !== 0;
+
+    const road: Road = { cls, name: tags.name ?? '', path };
+    if (gradeSeparated) road.gradeSeparated = true;
+    if (tags.oneway === 'yes') road.oneway = true;
+    if (!BUS_EXCLUDED.has(hw)) road.busUsable = true;
+    out.push(road);
+  }
+  return out;
 }
 
 /** game-project 的 tier 是由 OSM highway 等級推出來的，這裡對應回道路分級。 */

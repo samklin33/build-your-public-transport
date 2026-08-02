@@ -6,6 +6,7 @@ import {
   estimateWidthM,
   parseOverpassGeoJson,
   parseOverpassRoads,
+  parseOverpassRoadsDetailed,
   ROAD_CLASSES,
 } from '../scripts/roads-parse';
 
@@ -163,5 +164,86 @@ describe('路寬推估', () => {
     for (const c of ROAD_CLASSES) {
       expect(DEFAULT_LANES[c]).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('Overpass 原始資料解析（保留公車繞徑需要的標籤）', () => {
+  const way = (tags: Record<string, string>, n = 3) => ({
+    type: 'way',
+    tags,
+    geometry: Array.from({ length: n }, (_, i) => ({
+      lat: 25.03 + i * 0.01,
+      lon: 121.54 + i * 0.01,
+    })),
+  });
+
+  it('highway 等級對應到三級分類', () => {
+    const r = parseOverpassRoadsDetailed({
+      elements: [
+        way({ highway: 'primary', name: '忠孝東路' }),
+        way({ highway: 'secondary', name: '光復南路' }),
+        way({ highway: 'residential', name: '某巷' }),
+      ],
+    });
+    expect(r.map((x) => x.cls)).toEqual([0, 1, 2]);
+  });
+
+  it('標出立體交叉 —— 這是公車不會開上高架橋的關鍵', () => {
+    const r = parseOverpassRoadsDetailed({
+      elements: [
+        way({ highway: 'primary', name: '地面道路' }),
+        way({ highway: 'trunk', name: '建國高架', bridge: 'yes' }),
+        way({ highway: 'primary', name: '隧道', tunnel: 'yes' }),
+        // 高架常常只標 layer 沒標 bridge
+        way({ highway: 'primary', name: '只標 layer', layer: '1' }),
+      ],
+    });
+    expect(r[0].gradeSeparated).toBeUndefined();
+    expect(r[1].gradeSeparated).toBe(true);
+    expect(r[2].gradeSeparated).toBe(true);
+    expect(r[3].gradeSeparated).toBe(true);
+  });
+
+  it('國道與快速道路標成公車不可走', () => {
+    const r = parseOverpassRoadsDetailed({
+      elements: [
+        way({ highway: 'motorway', name: '國道一號' }),
+        way({ highway: 'trunk', name: '市民大道高架' }),
+        way({ highway: 'primary', name: '忠孝東路' }),
+        way({ highway: 'secondary', name: '光復南路' }),
+      ],
+    });
+    expect(r[0].busUsable).toBeUndefined();
+    expect(r[1].busUsable).toBeUndefined();
+    expect(r[2].busUsable).toBe(true);
+    expect(r[3].busUsable).toBe(true);
+  });
+
+  it('保留單行道', () => {
+    const r = parseOverpassRoadsDetailed({
+      elements: [
+        way({ highway: 'residential', oneway: 'yes' }),
+        way({ highway: 'residential' }),
+      ],
+    });
+    expect(r[0].oneway).toBe(true);
+    expect(r[1].oneway).toBeUndefined();
+  });
+
+  it('略過不認識的 highway 等級與壞資料', () => {
+    const r = parseOverpassRoadsDetailed({
+      elements: [
+        way({ highway: 'footway' }), // 人行道，不是道路
+        way({ highway: 'primary' }, 1), // 點太少
+        { type: 'node', tags: { highway: 'primary' } },
+        way({ highway: 'primary', name: '好的' }),
+      ],
+    });
+    expect(r).toHaveLength(1);
+    expect(r[0].name).toBe('好的');
+  });
+
+  it('沒有 elements 就明確報錯', () => {
+    expect(() => parseOverpassRoadsDetailed({})).toThrow();
   });
 });

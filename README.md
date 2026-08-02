@@ -21,6 +21,26 @@ npm run dev            # http://localhost:5173
 
 想更新到更新年份的資料再跑 `npm run fetch:sources`（需要連外網路）。
 
+### 連不到 Overpass API 時
+
+`fetch:water` 與 `fetch:roads` 需要 Overpass。若網路環境擋掉了（企業 proxy 常見），
+**用瀏覽器一樣拿得到**，不需要任何設定：
+
+```bash
+npm run fetch:water -- --print-query   # 印出查詢
+npm run fetch:roads -- --print-query
+```
+
+把查詢貼到 <https://overpass-turbo.eu> 執行 → Export →
+「raw data directly from Overpass API」，存成：
+
+| 指令 | 存檔路徑 |
+|---|---|
+| `fetch:water` | `data/sources/overpass-water-raw.json` |
+| `fetch:roads` | `data/sources/overpass-roads-raw.json` |
+
+再重跑該指令，它會自動改讀本機檔案，不再連 API。
+
 其他指令：
 
 ```bash

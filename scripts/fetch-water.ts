@@ -17,7 +17,7 @@
  *   2. 跨河路段套用 riverCrossingMultiplier —— 這個係數在成本模型裡
  *      定義好了卻一直沒被套用，目前跨淡水河跟在平地蓋一樣便宜
  */
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseOverpassWater } from './water-parse';
@@ -73,12 +73,40 @@ async function fetchOverpass(query: string): Promise<unknown> {
   throw lastErr ?? new Error('所有 Overpass 端點都失敗');
 }
 
+/**
+ * 手動下載的 Overpass 輸出放這裡也可以。
+ *
+ * 有些網路環境連不到 Overpass API（開發這支程式的環境就是被組織的 egress
+ * 政策擋掉，回 403）。這種情況可以改用瀏覽器：到 overpass-turbo.eu 貼上
+ * 查詢、按執行，再 Export → raw data directly from Overpass API，
+ * 把檔案存成下面這個路徑，重跑一次就會直接讀它。
+ */
+const MANUAL_PATH = 'data/sources/overpass-water-raw.json';
+
+async function loadRaw(): Promise<{ raw: unknown; from: string }> {
+  const manual = resolve(ROOT, MANUAL_PATH);
+  try {
+    const text = await readFile(manual, 'utf8');
+    console.log(`  使用手動下載的檔案 ${MANUAL_PATH}`);
+    return { raw: JSON.parse(text), from: MANUAL_PATH };
+  } catch {
+    // 沒有手動檔案就走 API
+  }
+  return { raw: await fetchOverpass(buildQuery()), from: 'Overpass API' };
+}
+
 async function main() {
+  // npm run fetch:water -- --print-query
+  if (process.argv.includes('--print-query')) {
+    console.log(buildQuery());
+    return;
+  }
+
   await mkdir(OUT, { recursive: true });
-  console.log('抓取雙北水域（Overpass）');
+  console.log('抓取雙北水域');
   console.log(`  範圍 ${BBOX.south},${BBOX.west} – ${BBOX.north},${BBOX.east}`);
 
-  const raw = await fetchOverpass(buildQuery());
+  const { raw } = await loadRaw();
   const water = parseOverpassWater(raw);
 
   if (water.length === 0) {
@@ -100,7 +128,18 @@ async function main() {
 
 main().catch((err) => {
   console.error('\n✗ fetch-water 失敗:', err instanceof Error ? err.message : err);
-  console.error('\n連不到 API 的話，可以到 overpass-turbo.eu 手動跑這段查詢：\n');
+  console.error(
+    `\n連不到 Overpass API 的話，用瀏覽器也可以，不需要任何設定：
+
+  1. 開 https://overpass-turbo.eu
+  2. 把下面整段查詢貼進左邊的編輯器，按「執行 / Run」
+  3. 按「匯出 / Export」→「raw data directly from Overpass API」
+  4. 把下載的檔案存成 ${MANUAL_PATH}
+  5. 重跑 npm run fetch:water（會自動讀那個檔案，不再連 API）
+
+查詢內容：
+`,
+  );
   console.error(buildQuery());
   process.exit(1);
 });
