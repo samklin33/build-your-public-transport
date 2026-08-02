@@ -1,0 +1,58 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main, claude/city-transit-planning-game-cefbt8]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同時只跑一個部署；新的 push 進來就取消排隊中的舊的（但不中斷進行中的）
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # city pack 已經 commit 在 public/ 裡，這裡重建一次確保它跟目前的
+      # 參數與腳本一致（build:pack 只讀 data/sources/，不需要連外網路）
+      - run: npm run build:pack
+
+      - run: npm test
+
+      # 模擬器對照真實台北捷運的校準檢查。算錯了就不該部署出去。
+      - run: npm run calibrate
+
+      - run: npm run build
+
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
