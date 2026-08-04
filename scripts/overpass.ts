@@ -10,8 +10,19 @@
  * 2. **失敗時要把回應內容印出來。** Overpass 的錯誤訊息寫在 body 裡，
  *    只看狀態碼會一直用猜的。
  *
- * 3. **多備幾個鏡像。** 主站常常滿載，而且不同鏡像的限制不一樣。
+ * 3. **多備幾個鏡像，而且要重試。** Overpass 是免費的共享服務，
+ *    忙的時候回 504 / 429 是常態而不是例外 —— 尤其 504 帶著
+ *    `Dispatcher_Client::request_read_a` 時，意思只是「現在排不到執行位」，
+ *    過幾分鐘再送同一個查詢通常就會過。第一次失敗就放棄的客戶端，
+ *    在 Overpass 上基本上是不能用的。
  */
+
+/** 一次請求的上限。查詢本身宣告 [timeout:300]，客戶端要留更多餘裕。 */
+const REQUEST_TIMEOUT_MS = 360_000;
+
+/** 全部端點都失敗算一輪。輪與輪之間等待遞增。 */
+const MAX_ROUNDS = 4;
+const ROUND_BACKOFF_MS = [5_000, 20_000, 60_000];
 
 export const OVERPASS_ENDPOINTS = [
   'https://overpass-api.de/api/interpreter',
@@ -29,47 +40,94 @@ export interface OverpassResult {
   endpoint: string;
 }
 
-export async function queryOverpass(query: string): Promise<OverpassResult> {
-  const problems: string[] = [];
+/**
+ * 這個狀態碼值不值得重試？
+ *
+ * 400 是查詢本身寫錯（Overpass 會在 body 裡指出第幾行），換端點、等再久
+ * 都不會變成 200，所以直接放棄並把錯誤指出來，比耗掉 4 個端點 × 4 輪好。
+ * 其餘的（429 排隊中、502/503/504 過載）都是暫時性的。
+ */
+export function isRetryableStatus(status: number): boolean {
+  return status !== 400;
+}
 
-  for (const url of OVERPASS_ENDPOINTS) {
-    try {
-      console.log(`  查詢 ${url} …`);
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          // 這兩個 header 是 406 的解方
-          'User-Agent': USER_AGENT,
-          Accept: 'application/json',
-        },
-        body: new URLSearchParams({ data: query }).toString(),
-      });
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-      if (!res.ok) {
-        // Overpass 把真正的原因寫在 body 裡，不印出來就只能猜
-        const body = (await res.text().catch(() => '')).trim().slice(0, 600);
-        throw new Error(
-          `HTTP ${res.status} ${res.statusText}${body ? `\n      伺服器回應：${body}` : ''}`,
-        );
-      }
+/** 把秒數印成人看得懂的樣子。 */
+function human(ms: number): string {
+  return ms >= 60_000 ? `${Math.round(ms / 60_000)} 分鐘` : `${Math.round(ms / 1000)} 秒`;
+}
 
-      const text = await res.text();
-      try {
-        return { raw: JSON.parse(text), endpoint: url };
-      } catch {
-        throw new Error(
-          `回應不是合法 JSON（前 300 字）：\n      ${text.trim().slice(0, 300)}`,
-        );
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.warn(`  ! 失敗：${msg}`);
-      problems.push(`${url}\n    ${msg}`);
-    }
+/** 送一次請求。成功回傳解析後的 JSON，失敗一律 throw。 */
+async function attempt(url: string, query: string): Promise<unknown> {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      // 這兩個 header 是 406 的解方
+      'User-Agent': USER_AGENT,
+      Accept: 'application/json',
+    },
+    body: new URLSearchParams({ data: query }).toString(),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  });
+
+  if (!res.ok) {
+    // Overpass 把真正的原因寫在 body 裡，不印出來就只能猜
+    const body = (await res.text().catch(() => '')).trim().slice(0, 600);
+    const err = new Error(
+      `HTTP ${res.status} ${res.statusText}${body ? `\n      伺服器回應：${body}` : ''}`,
+    );
+    (err as Error & { status?: number }).status = res.status;
+    throw err;
   }
 
-  throw new Error(`所有 Overpass 端點都失敗：\n\n  ${problems.join('\n\n  ')}`);
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`回應不是合法 JSON（前 300 字）：\n      ${text.trim().slice(0, 300)}`);
+  }
+}
+
+export async function queryOverpass(query: string): Promise<OverpassResult> {
+  const problems = new Map<string, string>();
+
+  for (let round = 0; round < MAX_ROUNDS; round++) {
+    for (const url of OVERPASS_ENDPOINTS) {
+      const label = round === 0 ? '' : `（第 ${round + 1} 輪）`;
+      console.log(`  查詢 ${url} ${label}…`);
+      const started = Date.now();
+
+      try {
+        const raw = await attempt(url, query);
+        console.log(`  ✓ 成功，耗時 ${human(Date.now() - started)}`);
+        return { raw, endpoint: url };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        const status = (err as Error & { status?: number }).status;
+
+        // 查詢寫錯，重試沒有意義
+        if (status !== undefined && !isRetryableStatus(status)) {
+          throw new Error(`查詢被拒絕（不是暫時性問題，重試也不會過）：\n\n  ${msg}`);
+        }
+
+        console.warn(`  ! 失敗：${msg}`);
+        problems.set(url, msg);
+      }
+    }
+
+    const wait = ROUND_BACKOFF_MS[round];
+    if (wait === undefined) break; // 最後一輪跑完就不再等
+    console.log(
+      `\n  全部端點都忙。這是 Overpass 的常態，等 ${human(wait)} 再試一輪` +
+        `（還有 ${MAX_ROUNDS - round - 1} 輪）…\n`,
+    );
+    await sleep(wait);
+  }
+
+  const detail = [...problems].map(([url, msg]) => `${url}\n    ${msg}`).join('\n\n  ');
+  throw new Error(`重試 ${MAX_ROUNDS} 輪後所有 Overpass 端點仍然失敗：\n\n  ${detail}`);
 }
 
 /** 連不到 API 時的手動流程說明。 */
