@@ -47,13 +47,24 @@ const SIMPLIFY_M = 10;
  */
 const MANUAL_PATH = 'data/sources/overpass-roads-raw.json';
 
-/** 保留公車繞徑需要的標籤。跟 fetch-water 的查詢是同一個模式。 */
+/**
+ * 只抓幹道到次要道路。
+ *
+ * 刻意**不含** residential / unclassified / living_street：
+ *   - 巷弄的地圖紋理已經有了（game-project 那份），不需要重抓
+ *   - 公車不會開進巷弄，繞徑用不到
+ *   - 把它們加進來，雙北全區會超過十萬條 way，overpass-turbo 會試著
+ *     把結果渲染在地圖上，瀏覽器很可能直接當掉，匯出檔也會大到難以處理
+ *
+ * 這樣查詢的量級落在一兩萬條，瀏覽器跑得動、匯出檔也還算小。
+ */
 export function buildRoadQuery(): string {
   const b = '24.85,121.25,25.32,121.78';
   return `
-[out:json][timeout:600];
+[out:json][timeout:300];
 (
-  way["highway"~"^(motorway|trunk|primary|secondary|tertiary|residential|unclassified|living_street|motorway_link|trunk_link|primary_link|secondary_link)$"](${b});
+  way["highway"~"^(motorway|trunk|primary|secondary|tertiary)$"](${b});
+  way["highway"~"^(motorway_link|trunk_link|primary_link|secondary_link)$"](${b});
 );
 out geom;
 `.trim();
@@ -70,21 +81,17 @@ async function main() {
   await mkdir(OUT, { recursive: true });
   console.log('抓取雙北道路');
 
-  // 有手動下載的 Overpass 原始檔就優先用它 —— 標籤比較完整
+  // 有手動下載的 Overpass 原始檔，就用它取代幹道與次要道路（帶完整標籤，可做繞徑），
+  // 街廓道路仍沿用 game-project 那份 —— 它只是底圖紋理，不需要標籤，
+  // 而且把巷弄放進 Overpass 查詢會讓資料量大到瀏覽器跑不動。
   const manual = resolve(ROOT, MANUAL_PATH);
+  let detailed: Road[] | null = null;
   try {
     const text = await readFile(manual, 'utf8');
-    console.log(`  使用手動下載的 Overpass 檔案 ${MANUAL_PATH}（標籤完整）`);
-    const detailed = parseOverpassRoadsDetailed(JSON.parse(text));
-    const path = resolve(OUT, 'twn-roads.json');
-    await writeFile(path, JSON.stringify(detailed));
-    const count = (c: number) => detailed.filter((r) => r.cls === c).length.toLocaleString();
-    const grade = detailed.filter((r) => r.gradeSeparated).length;
-    console.log(`\n  ✓ ${path.replace(ROOT + '/', '')}`);
-    console.log(`  幹道 ${count(0)} / 次要道路 ${count(1)} / 街廓道路 ${count(2)}`);
-    console.log(`  立體交叉路段（橋樑／隧道／高架）${grade.toLocaleString()} —— 公車繞徑會排除這些`);
-    console.log('\n完成。接著執行 npm run build:pack');
-    return;
+    detailed = parseOverpassRoadsDetailed(JSON.parse(text));
+    console.log(
+      `  使用 ${MANUAL_PATH}：${detailed.length.toLocaleString()} 段幹道／次要道路（標籤完整）`,
+    );
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
   }
@@ -104,15 +111,30 @@ async function main() {
 
   if (roads.length === 0) throw new Error('沒有解析到任何道路');
 
+  // 有 Overpass 版就用它換掉 game-project 的幹道與次要道路，街廓道路保留
+  const merged = detailed
+    ? [...roads.filter((r) => r.cls === 2), ...detailed]
+    : roads;
+
   const path = resolve(OUT, 'twn-roads.json');
-  const json = JSON.stringify(roads);
+  const json = JSON.stringify(merged);
   await writeFile(path, json);
 
-  const count = (c: number) => roads.filter((r) => r.cls === c).length.toLocaleString();
-  const totalPts = roads.reduce((a, r) => a + r.path.length / 2, 0);
+  const count = (c: number) => merged.filter((r) => r.cls === c).length.toLocaleString();
+  const totalPts = merged.reduce((a, r) => a + r.path.length / 2, 0);
+  const grade = merged.filter((r) => r.gradeSeparated).length;
   console.log(`\n  ✓ ${path.replace(ROOT + '/', '')} (${(json.length / 1024 / 1024).toFixed(2)} MB)`);
   console.log(`  幹道 ${count(0)} / 次要道路 ${count(1)} / 街廓道路 ${count(2)}`);
   console.log(`  座標點 ${totalPts.toLocaleString()}`);
+  if (detailed) {
+    console.log(
+      `  立體交叉路段（橋樑／隧道／高架）${grade.toLocaleString()} —— 公車繞徑會排除這些`,
+    );
+    console.log('  → 幹道與次要道路帶有完整標籤，可做公車沿路規劃');
+  } else {
+    console.log('  → 尚無 Overpass 原始資料，目前的道路無法做公車繞徑（缺立體交叉標記）');
+    console.log(`     取得方式：npm run fetch:roads -- --print-query`);
+  }
   console.log('\n完成。接著執行 npm run build:pack');
 }
 

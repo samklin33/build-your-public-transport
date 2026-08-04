@@ -4,3 +4,6 @@ dist/
 *.local
 .vite/
 dist-single/
+
+# Overpass 手動下載的原始檔（很大，不進版控）
+data/sources/overpass-*-raw.json
