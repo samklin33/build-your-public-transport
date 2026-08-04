@@ -21,16 +21,12 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseOverpassWater } from './water-parse';
+import { manualInstructions, queryOverpass } from './overpass';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = resolve(ROOT, 'data/sources');
 
 const BBOX = { south: 24.85, west: 121.25, north: 25.32, east: 121.78 };
-
-const ENDPOINTS = [
-  'https://overpass-api.de/api/interpreter',
-  'https://overpass.kumi.systems/api/interpreter',
-];
 
 /**
  * 只抓「面狀」水域，不抓 waterway=river 的中心線 ——
@@ -53,26 +49,6 @@ out geom;
 `.trim();
 }
 
-async function fetchOverpass(query: string): Promise<unknown> {
-  let lastErr: unknown;
-  for (const url of ENDPOINTS) {
-    try {
-      console.log(`  查詢 ${url} …`);
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ data: query }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
-      return await res.json();
-    } catch (err) {
-      console.warn(`  ! ${url} 失敗：${err instanceof Error ? err.message : err}`);
-      lastErr = err;
-    }
-  }
-  throw lastErr ?? new Error('所有 Overpass 端點都失敗');
-}
-
 /**
  * 手動下載的 Overpass 輸出放這裡也可以。
  *
@@ -92,7 +68,8 @@ async function loadRaw(): Promise<{ raw: unknown; from: string }> {
   } catch {
     // 沒有手動檔案就走 API
   }
-  return { raw: await fetchOverpass(buildQuery()), from: 'Overpass API' };
+  const { raw, endpoint } = await queryOverpass(buildQuery());
+  return { raw, from: endpoint };
 }
 
 async function main() {
@@ -128,18 +105,6 @@ async function main() {
 
 main().catch((err) => {
   console.error('\n✗ fetch-water 失敗:', err instanceof Error ? err.message : err);
-  console.error(
-    `\n連不到 Overpass API 的話，用瀏覽器也可以，不需要任何設定：
-
-  1. 開 https://overpass-turbo.eu
-  2. 把下面整段查詢貼進左邊的編輯器，按「執行 / Run」
-  3. 按「匯出 / Export」→「raw data directly from Overpass API」
-  4. 把下載的檔案存成 ${MANUAL_PATH}
-  5. 重跑 npm run fetch:water（會自動讀那個檔案，不再連 API）
-
-查詢內容：
-`,
-  );
-  console.error(buildQuery());
+  console.error('\n' + manualInstructions(MANUAL_PATH, buildQuery()));
   process.exit(1);
 });

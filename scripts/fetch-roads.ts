@@ -16,6 +16,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseNamedRoads, parseOverpassRoadsDetailed, type Road } from './roads-parse';
+import { manualInstructions, queryOverpass } from './overpass';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = resolve(ROOT, 'data/sources');
@@ -94,6 +95,16 @@ async function main() {
     );
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+    // 沒有手動檔案就試著直接連 Overpass。失敗不致命 —— 還有 game-project
+    // 那份可以撐住地圖，只是不能做公車繞徑。
+    try {
+      const { raw } = await queryOverpass(buildRoadQuery());
+      detailed = parseOverpassRoadsDetailed(raw);
+      console.log(`  從 Overpass 取得 ${detailed.length.toLocaleString()} 段幹道／次要道路`);
+    } catch (e) {
+      console.warn(`  ! 連不到 Overpass，改用 game-project 的道路（無法做公車繞徑）`);
+      console.warn(`    ${e instanceof Error ? e.message.split('\n')[0] : e}`);
+    }
   }
 
   const roads: Road[] = [];
@@ -140,6 +151,7 @@ async function main() {
 
 main().catch((err) => {
   console.error('\n✗ fetch-roads 失敗:', err instanceof Error ? err.message : err);
+  console.error('\n' + manualInstructions(MANUAL_PATH, buildRoadQuery()));
   process.exit(1);
 });
 
