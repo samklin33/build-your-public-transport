@@ -1,0 +1,56 @@
+{
+  "exclude": [
+    "public/city-packs/*.json",
+    "data/sources/*",
+    "package-lock.json",
+    "node_modules/**",
+    "dist/**",
+    "dist-single/**"
+  ],
+  "rules": [
+    {
+      "path": "scripts/**/*.ts",
+      "merge_system_rule": true,
+      "rule": "建置腳本，吃 Overpass 與政府開放資料等外部輸入。檢查：(1) 遠端資料的欄位在使用前有沒有做形狀檢查，不要直接 as 斷言；(2) 遠端資料是否可能決定寫檔路徑；(3) 網路請求要有 timeout 與鏡像 fallback——Overpass 公開鏡像常回 504，單一端點失敗不能讓整個 pipeline 掛掉；(4) 錯誤訊息要說出是哪個來源、哪個階段失敗；(5) 產出檔案的大小與筆數要有驗收檢查，靜默產出壞資料比失敗更糟。"
+    },
+    {
+      "path": "scripts/build-city-pack.ts",
+      "merge_system_rule": true,
+      "rule": "產出 public/city-packs/taipei.json。改動輸出結構時必須同步更新 src/model/types.ts 並重新產生 pack，否則前端會在執行期壞掉。末尾的驗收清單是這個檔案的安全網：新增欄位就要新增對應驗收，不要為了讓 build 過而放寬門檻卻不說明原因。"
+    },
+    {
+      "path": "src/sim/**/*.ts",
+      "merge_system_rule": true,
+      "rule": "模擬核心。檢查：(1) 演算法複雜度——路網規模到數千節點，圖走訪要留意；(2) 浮點數累加誤差；(3) 改動成本模型或參數後必須跑 npm run calibrate，對照真實台北捷運的誤差不能跑掉；(4) worker 邊界傳遞的訊息要可序列化。這裡的改動要有對應測試。"
+    },
+    {
+      "path": "src/render/**/*.{ts,tsx}",
+      "merge_system_rule": true,
+      "rule": "Canvas 繪製，每幀都會跑。檢查：(1) 不要在 render loop 裡配置物件或建立 closure；(2) 座標轉換要一致使用 camera 的函式，不要各處自己算；(3) 大量圖徵要有視野裁切；(4) OSM 來的名稱字串長度不設限會畫出畫面外。"
+    },
+    {
+      "path": "src/ui/**/*.tsx",
+      "merge_system_rule": true,
+      "rule": "React 元件。檢查：(1) 絕對不要用 dangerouslySetInnerHTML——OSM 名稱是社群可編輯的第三方輸入；(2) 事件處理器不要在 render 時重建造成子元件重繪；(3) 從 store 取值要用 selector，不要整包訂閱。"
+    },
+    {
+      "path": "src/state/store.ts",
+      "merge_system_rule": true,
+      "rule": "zustand store，含存檔載入。JSON.parse 之後的型別斷言沒有執行期驗證——新增載入欄位時要檢查形狀，畸形存檔不該讓整個 app 崩潰。"
+    },
+    {
+      "path": ".github/workflows/*.yml",
+      "merge_system_rule": true,
+      "rule": "CI。檢查：(1) 絕對不要把 ${{ }} 的不可信輸入（PR 標題、分支名、issue 內容）直接內插進 run: 區塊；(2) third-party action 要釘住版本；(3) permissions 給最小權限，deploy 以外的 job 不需要 pages: write 或 id-token: write；(4) pull_request_target 搭配 checkout PR 程式碼是危險組合。"
+    },
+    {
+      "path": "tests/**/*.ts",
+      "merge_system_rule": true,
+      "rule": "測試要驗證行為而不是複述實作。檢查測試有沒有真的會失敗——斷言必須夠具體，能抓到迴歸。fixture 資料要小且有代表性。"
+    },
+    {
+      "path": "**/*.{md,mdx}",
+      "rule": "文件。檢查指令與檔案路徑是否與現況相符，程式碼範例是否真的能跑。"
+    }
+  ]
+}

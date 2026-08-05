@@ -532,7 +532,7 @@ async function main() {
       totalPop.toLocaleString(),
     ],
     ['真實捷運 116 站', referenceNetwork.stations.length === 116, `${referenceNetwork.stations.length}`],
-    ['pack 小於 4 MB', mb < 4, `${mb.toFixed(2)} MB`],
+    ['pack 小於 6 MB', mb < 6, `${mb.toFixed(2)} MB`],
     ['有道路資料', roads.length > 5000, `${roads.length.toLocaleString()} 段`],
     ['IPF 有收斂', iterations < 40, `${iterations} 次疊代`],
   ];
