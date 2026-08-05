@@ -1,0 +1,57 @@
+name: CI
+
+# deploy.yml 只在 push 到 main 時跑，所以 PR 上原本沒有任何檢查。
+# 這個 workflow 就是 PR 的把關者——「CI 過了才合」指的是它。
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# CI 只需要讀 repo。部署權限留在 deploy.yml。
+permissions:
+  contents: read
+
+# 同一個分支有新 push 就取消還在跑的舊的。
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      # city pack 是 commit 進 repo 的產物。build:pack 只讀 data/sources/，
+      # 不連外網，而且是決定性的（同樣輸入必得同樣輸出）——所以可以直接比對：
+      # 有人改了腳本或來源資料卻忘記重新產生 pack，這裡就會擋下來。
+      - name: Rebuild city pack
+        run: npm run build:pack
+
+      - name: City pack 是否為最新
+        run: |
+          if ! git diff --exit-code --stat public/city-packs/; then
+            echo "::error::public/city-packs/ 與 data/sources/ 不同步。請跑 npm run build:pack 後 commit 產出的 pack。"
+            exit 1
+          fi
+
+      # 模擬器對照真實台北捷運的校準檢查。算錯了就不該合進去。
+      - name: Calibrate
+        run: npm run calibrate
+
+      - name: Build
+        run: npm run build
